@@ -1,35 +1,12 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/app/components/UI/Navbar';
 import { LoadingSpinner } from '@/app/components/UI/LoadingSpinner';
+import { MapSelector } from '@/app/components/Map/MapSelector';
 import { useMapStore } from '@/lib/store';
 import { useTrains } from '@/lib/hooks/useTrains';
-
-// Check if Mapbox token is available and use appropriate map component
-const hasMapboxToken = Boolean(process.env.NEXT_PUBLIC_MAPBOX_TOKEN);
-console.log('Page render - hasMapboxToken:', hasMapboxToken, 'token:', process.env.NEXT_PUBLIC_MAPBOX_TOKEN?.substring(0, 10) + '...');
-
-const MapComponent = dynamic(
-  () => {
-    console.log('Dynamic import - using TrainMap:', hasMapboxToken);
-    if (hasMapboxToken) {
-      return import('@/app/components/Map/TrainMap').then(mod => mod.TrainMap);
-    } else {
-      return import('@/app/components/Map/SimpleMap').then(mod => mod.SimpleMap);
-    }
-  },
-  { 
-    loading: () => (
-      <div className="w-full h-full flex items-center justify-center bg-gray-100">
-        <LoadingSpinner size="lg" />
-      </div>
-    ),
-    ssr: false 
-  }
-);
 
 function HomeContent() {
   const searchParams = useSearchParams();
@@ -51,7 +28,7 @@ function HomeContent() {
     <div className="flex flex-col h-screen bg-white">
       <Navbar />
       <main className="flex-1 relative bg-gray-50">
-        <MapComponent />
+        <MapSelector />
       </main>
     </div>
   );
