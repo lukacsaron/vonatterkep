@@ -14,11 +14,9 @@ import { getDelayCategory, getDelayColor } from '@/lib/utils';
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Set Mapbox access token
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-if (MAPBOX_TOKEN) {
-  mapboxgl.accessToken = MAPBOX_TOKEN;
-}
+// Set Mapbox access token (hardcoded)
+const MAPBOX_TOKEN = 'pk.eyJ1IjoiYXJvbmx1a2FjcyIsImEiOiJjbWM4eTZyOXAweW5uMmtzM3hmanhtNzlxIn0.iZgLUL05MUWcOI_03e1EFA';
+mapboxgl.accessToken = MAPBOX_TOKEN;
 
 export function TrainMap() {
   const mapContainer = useRef<HTMLDivElement>(null);
