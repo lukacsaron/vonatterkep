@@ -7,12 +7,12 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Vonat Térkép - Magyar vasúti követő",
-  description: "Valós idejű vonatkövetés és útvonalfejányzás a magyar vasúton",
-  keywords: ["MÁV", "train", "railway", "Hungary", "tracking", "journey planner"],
+  description: "Valós idejű vonatkövetés",
+  keywords: ["MÁV", "train", "railway", "Hungary", "tracking", "journey planner", "holavonat", "vonat térkép", "elvira", "emma"],
   authors: [{ name: "Vonat Térkép Team" }],
   openGraph: {
     title: "Vonat Térkép - Magyar vasúti követő",
-    description: "Valós idejű vonatkövetés és útvonalfejányzás a magyar vasúton",
+    description: "Valós idejű vonatkövetés",
     type: "website",
     locale: "hu_HU",
     alternateLocale: ["en_US", "de_DE"],
