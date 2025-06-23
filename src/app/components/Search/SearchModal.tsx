@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Search, Train, MapPin, Clock, X } from 'lucide-react';
 import { useTrainSearch } from '@/lib/hooks/useTrainSearch';
 import { useMapStore } from '@/lib/store';
@@ -20,6 +20,11 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
   
   const { results, isLoading, hasQuery } = useTrainSearch(query);
   const { zoomToTrain } = useMapStore();
+
+  const selectTrain = useCallback((train: TrainType) => {
+    zoomToTrain(train);
+    onClose();
+  }, [zoomToTrain, onClose]);
 
   // Focus input when modal opens
   useEffect(() => {
@@ -64,7 +69,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, results, selectedIndex, onClose]);
+  }, [isOpen, results, selectedIndex, onClose, selectTrain]);
 
   // Scroll selected item into view
   useEffect(() => {
@@ -78,11 +83,6 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
       }
     }
   }, [selectedIndex]);
-
-  const selectTrain = (train: TrainType) => {
-    zoomToTrain(train);
-    onClose();
-  };
 
   const getTrainIcon = (trainNumber: string) => {
     if (trainNumber.includes('IC') || trainNumber.includes('InterCity')) {

@@ -39,7 +39,7 @@ export default function SearchPage() {
                 <div className="text-2xl mb-2">🚄</div>
                 <h3 className="font-medium text-gray-900 mb-1">Train Numbers</h3>
                 <p className="text-sm text-gray-600">
-                  Search by train number like "IC 560" or "S80"
+                  Search by train number like &quot;IC 560&quot; or &quot;S80&quot;
                 </p>
               </div>
 
@@ -47,7 +47,7 @@ export default function SearchPage() {
                 <div className="text-2xl mb-2">📍</div>
                 <h3 className="font-medium text-gray-900 mb-1">Routes</h3>
                 <p className="text-sm text-gray-600">
-                  Find trains by destination or route like "Budapest Szeged"
+                  Find trains by destination or route like &quot;Budapest Szeged&quot;
                 </p>
               </div>
 
@@ -55,7 +55,7 @@ export default function SearchPage() {
                 <div className="text-2xl mb-2">🏷️</div>
                 <h3 className="font-medium text-gray-900 mb-1">Train Names</h3>
                 <p className="text-sm text-gray-600">
-                  Search by special train names like "LATORCA"
+                  Search by special train names like &quot;LATORCA&quot;
                 </p>
               </div>
             </div>

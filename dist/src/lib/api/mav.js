@@ -33,7 +33,7 @@ class MavApiClient {
             const data = await response.json();
             console.log('📦 MobileService stations response type:', typeof data, 'keys:', Object.keys(data || {}));
             // Try different response formats
-            let stations = data.Allomasok || data || [];
+            let stations = (data === null || data === void 0 ? void 0 : data.Allomasok) || data || [];
             if (!Array.isArray(stations)) {
                 console.warn('⚠️ Unexpected stations response format:', data);
                 stations = [];
@@ -82,7 +82,7 @@ class MavApiClient {
                 throw new Error(`MÁV API error: ${response.status}`);
             }
             const data = await response.json();
-            return data.Indulasok || [];
+            return (data === null || data === void 0 ? void 0 : data.Indulasok) || [];
         }
         catch (error) {
             console.error('Error fetching departures from MÁV:', error);
@@ -110,7 +110,7 @@ class MavApiClient {
                 throw new Error(`MÁV API error: ${response.status}`);
             }
             const data = await response.json();
-            return data.Erkezesek || [];
+            return (data === null || data === void 0 ? void 0 : data.Erkezesek) || [];
         }
         catch (error) {
             console.error('Error fetching arrivals from MÁV:', error);
@@ -171,7 +171,7 @@ class MavApiClient {
             }
             const data = await response.json();
             console.log(`📦 EMMA Trip Response:`, data);
-            const trip = (_a = data.data) === null || _a === void 0 ? void 0 : _a.trip;
+            const trip = (_a = data === null || data === void 0 ? void 0 : data.data) === null || _a === void 0 ? void 0 : _a.trip;
             if (!trip || !trip.stoptimes) {
                 console.warn(`🚨 No trip data found for ${gtfsId}:`, { trip, hasStoptimes: !!(trip === null || trip === void 0 ? void 0 : trip.stoptimes) });
                 return null;
@@ -401,7 +401,7 @@ class MavApiClient {
             }
             const data = await response.json();
             console.log('📦 EMMA API Response data:', data);
-            const vehicles = ((_a = data.data) === null || _a === void 0 ? void 0 : _a.vehiclePositions) || [];
+            const vehicles = ((_a = data === null || data === void 0 ? void 0 : data.data) === null || _a === void 0 ? void 0 : _a.vehiclePositions) || [];
             console.log(`✅ Successfully fetched ${vehicles.length} vehicles from EMMA API`);
             if (vehicles.length === 0) {
                 console.warn('⚠️ No vehicles returned from EMMA API, using fallback data');

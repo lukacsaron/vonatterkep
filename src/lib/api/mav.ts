@@ -85,7 +85,7 @@ class MavApiClient {
       console.log('📦 MobileService stations response type:', typeof data, 'keys:', Object.keys(data || {}));
       
       // Try different response formats
-      let stations = data.Allomasok || data || [];
+      let stations = (data as any)?.Allomasok || data || [];
       
       if (!Array.isArray(stations)) {
         console.warn('⚠️ Unexpected stations response format:', data);
@@ -144,7 +144,7 @@ class MavApiClient {
       }
 
       const data = await response.json();
-      return data.Indulasok || [];
+      return (data as any)?.Indulasok || [];
     } catch (error) {
       console.error('Error fetching departures from MÁV:', error);
       throw error;
@@ -175,7 +175,7 @@ class MavApiClient {
       }
 
       const data = await response.json();
-      return data.Erkezesek || [];
+      return (data as any)?.Erkezesek || [];
     } catch (error) {
       console.error('Error fetching arrivals from MÁV:', error);
       throw error;
@@ -241,7 +241,7 @@ class MavApiClient {
       const data = await response.json();
       console.log(`📦 EMMA Trip Response:`, data);
       
-      const trip = data.data?.trip;
+      const trip = (data as any)?.data?.trip;
       
       if (!trip || !trip.stoptimes) {
         console.warn(`🚨 No trip data found for ${gtfsId}:`, { trip, hasStoptimes: !!trip?.stoptimes });
@@ -508,7 +508,7 @@ class MavApiClient {
       const data = await response.json();
       console.log('📦 EMMA API Response data:', data);
       
-      const vehicles = data.data?.vehiclePositions || [];
+      const vehicles = (data as any)?.data?.vehiclePositions || [];
       console.log(`✅ Successfully fetched ${vehicles.length} vehicles from EMMA API`);
       
       if (vehicles.length === 0) {

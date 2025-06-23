@@ -35,12 +35,20 @@
 
 ## Files Modified
 
-1. **`package.json`** - Updated Tailwind and PostCSS dependencies
-2. **`postcss.config.mjs`** - Standard Tailwind/Autoprefixer setup  
-3. **`tailwind.config.ts`** - Added proper Tailwind configuration
-4. **`next.config.js`** - Fixed Next.js 15 compatibility
-5. **`Dockerfile`** - Simplified and improved build process
-6. **`start.sh`** - Robust startup script with error handling
+1. **`package.json`** - Updated Tailwind CSS v3.4.15 and PostCSS dependencies
+2. **`package-lock.json`** - Regenerated to match updated dependencies
+3. **`postcss.config.mjs`** - Standard Tailwind/Autoprefixer setup  
+4. **`tailwind.config.ts`** - Added proper Tailwind v3 configuration
+5. **`src/app/globals.css`** - Fixed Tailwind imports for v3 syntax
+6. **`next.config.js`** - Fixed Next.js 15 compatibility
+7. **`src/app/page.tsx`** - Added Suspense boundary for useSearchParams
+8. **`src/app/search/page.tsx`** - Fixed HTML entity encoding
+9. **`src/app/components/Search/SearchModal.tsx`** - Fixed useCallback dependencies
+10. **`src/lib/store.ts`** - Fixed train position property access
+11. **`src/lib/api/client.ts`** - Added proper TypeScript type assertions
+12. **`src/lib/api/mav.ts`** - Fixed TypeScript unknown type errors
+13. **`tsconfig.worker.json`** - Excluded browser-specific code from worker
+14. **`Dockerfile`** - Optimized build process with proper dependencies
 
 ## Next Steps for Deployment
 

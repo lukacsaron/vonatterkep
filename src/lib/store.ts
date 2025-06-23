@@ -43,7 +43,7 @@ export const useMapStore = create<MapState>((set) => ({
   zoomToTrain: (train) => set({ 
     selectedTrain: train,
     focusedTrain: train,
-    center: { lat: train.latitude, lng: train.longitude },
+    center: { lat: train.position.latitude, lng: train.position.longitude },
     zoom: 7
   }),
 }));

@@ -45,5 +45,5 @@ export function useKeyboardShortcut(
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [options.key, options.metaKey, options.ctrlKey, options.shiftKey, options.altKey, callback, ...dependencies]);
+  }, [options.key, options.metaKey, options.ctrlKey, options.shiftKey, options.altKey, options.preventDefault, callback, ...dependencies]);
 }

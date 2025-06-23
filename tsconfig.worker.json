@@ -17,6 +17,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["worker/**/*.ts", "src/lib/**/*.ts", "src/types/**/*.ts"],
+  "include": ["worker/**/*.ts", "src/lib/api/**/*.ts", "src/lib/redis.ts", "src/types/**/*.ts"],
   "exclude": ["node_modules"]
 }

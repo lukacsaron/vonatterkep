@@ -38,7 +38,7 @@ export async function fetcher<T>(
     throw new ApiError(response.status, await response.text());
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
 }
 
 export const api = {

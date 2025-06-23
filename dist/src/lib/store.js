@@ -20,6 +20,12 @@ exports.useMapStore = (0, zustand_1.create)((set) => ({
     setBounds: (bounds) => set({ bounds }),
     setZoom: (zoom) => set({ zoom }),
     setCenter: (center) => set({ center }),
+    zoomToTrain: (train) => set({
+        selectedTrain: train,
+        focusedTrain: train,
+        center: { lat: train.position.latitude, lng: train.position.longitude },
+        zoom: 7
+    }),
 }));
 exports.useUserStore = (0, zustand_1.create)((set) => ({
     user: null,

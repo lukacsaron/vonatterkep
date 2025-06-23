@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/app/components/UI/Navbar';
 import { LoadingSpinner } from '@/app/components/UI/LoadingSpinner';
@@ -31,7 +31,7 @@ const MapComponent = dynamic(
   }
 );
 
-export default function Home() {
+function HomeContent() {
   const searchParams = useSearchParams();
   const { data: trains } = useTrains();
   const { setSelectedTrain, setFocusedTrain } = useMapStore();
@@ -54,5 +54,20 @@ export default function Home() {
         <MapComponent />
       </main>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col h-screen bg-white">
+        <Navbar />
+        <main className="flex-1 relative bg-gray-50 flex items-center justify-center">
+          <LoadingSpinner size="lg" />
+        </main>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }
