@@ -1,73 +1,67 @@
-# Multi-stage build for production
+# Use Node.js 18 Alpine as base
 FROM node:18-alpine AS base
 
-# Install dependencies only when needed
-FROM base AS deps
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
+# Install system dependencies
+RUN apk add --no-cache libc6-compat curl
+
+# Set working directory
 WORKDIR /app
 
-# Install dependencies based on the preferred package manager
+# Copy package files
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production && npm cache clean --force
 
-# Rebuild the source code only when needed
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+# Install dependencies (all dependencies needed for build)
+RUN npm ci --frozen-lockfile
+
+# Copy source code
 COPY . .
 
-# Next.js collects completely anonymous telemetry data about general usage.
-# Learn more here: https://nextjs.org/telemetry
-# Uncomment the following line in case you want to disable telemetry during the build.
-ENV NEXT_TELEMETRY_DISABLED 1
+# Set environment variables for build
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
 
 # Build the application and worker
 RUN npm run build
 
-# Production image, copy all the files and run next
-FROM base AS runner
+# Create production runtime
+FROM node:18-alpine AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
+# Install system dependencies for runtime
+RUN apk add --no-cache curl
 
+# Create system user
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy the standalone output
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+# Set environment variables
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
-# Copy the compiled worker
-COPY --from=builder /app/dist ./dist
+# Copy built application
+COPY --from=base /app/.next/standalone ./
+COPY --from=base /app/.next/static ./.next/static
+COPY --from=base /app/public ./public
+COPY --from=base /app/dist ./dist
 
-# Create a startup script to run both web and worker
-COPY <<EOF /app/start.sh
-#!/bin/sh
-# Start the worker in the background
-node dist/worker/index.js &
-WORKER_PID=\$!
-
-# Start the web server
-node server.js &
-WEB_PID=\$!
-
-# Wait for any process to exit
-wait -n
-
-# Exit with status of process that exited first
-exit \$?
-EOF
-
+# Copy startup script
+COPY --from=base /app/start.sh ./start.sh
 RUN chmod +x /app/start.sh
 
+# Set ownership
+RUN chown -R nextjs:nodejs /app
+
+# Switch to non-root user
 USER nextjs
 
+# Expose port
 EXPOSE 3000
 
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
 
+# Start application
 CMD ["/app/start.sh"]
