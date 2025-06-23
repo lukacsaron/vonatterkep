@@ -46,6 +46,9 @@ COPY --from=base /app/.next/static ./.next/static
 COPY --from=base /app/public ./public
 COPY --from=base /app/dist ./dist
 
+# Copy node_modules for worker dependencies
+COPY --from=base /app/node_modules ./node_modules
+
 # Copy startup script
 COPY --from=base /app/start.sh ./start.sh
 RUN chmod +x /app/start.sh

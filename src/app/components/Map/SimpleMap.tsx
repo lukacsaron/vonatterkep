@@ -10,6 +10,7 @@ import { Train } from '@/types';
 export function SimpleMap() {
   const { selectedTrain, setSelectedTrain } = useMapStore();
   const { data: trains, isLoading, error } = useTrains();
+  const hasMapboxToken = !!process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
   const handleTrainClick = (train: Train) => {
     setSelectedTrain(train);
@@ -99,7 +100,8 @@ export function SimpleMap() {
       {/* Info banner */}
       <div className="absolute bottom-4 left-4 bg-blue-100 border border-blue-300 text-blue-800 px-4 py-2 rounded">
         <p className="text-sm">
-          📍 {trains?.length || 0} vonat megjelenítve • Adj hozzá NEXT_PUBLIC_MAPBOX_TOKEN-t interaktív térképhez
+          📍 {trains?.length || 0} vonat megjelenítve
+          {!hasMapboxToken && ' • Adj hozzá NEXT_PUBLIC_MAPBOX_TOKEN-t interaktív térképhez'}
         </p>
       </div>
     </div>
