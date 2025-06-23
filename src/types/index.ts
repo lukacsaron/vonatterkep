@@ -102,12 +102,16 @@ export interface JourneyLeg {
 
 export interface Departure {
   train: Train;
-  departure: Date;
-  arrival?: Date;
+  time: Date; // Generic time, can be arrival or departure
   platform?: string;
-  destination: Station;
+  // For Departures, this is the destination. For Arrivals, this is the origin.
+  remoteStation: Station; 
   delay: number;
   status: DepartureStatus;
+  // Legacy fields for backward compatibility
+  departure?: Date;
+  arrival?: Date;
+  destination?: Station;
 }
 
 export enum TrainType {
@@ -156,4 +160,23 @@ export interface Favorite {
   referenceId: string;
   name: string;
   createdAt: Date;
+}
+
+// New interface for train search results
+export interface TrainSearchResult {
+  gtfsId: string;
+  trainNumber: string;
+  trainName?: string; // e.g., "TÓPART"
+  trainType: TrainType;
+  origin: {
+    name: string;
+    time: Date;
+  };
+  destination: {
+    name: string;
+    time: Date;
+  };
+  durationMinutes: number;
+  liveDelayMinutes?: number; // Optional: only if train is active
+  isActive: boolean; // Is the train currently running and trackable?
 }

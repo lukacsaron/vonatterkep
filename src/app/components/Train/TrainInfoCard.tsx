@@ -11,16 +11,16 @@ interface TrainInfoCardProps {
 }
 
 export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
-  const [trainDetails, setTrainDetails] = useState<TrainDetails | null>(null);
+  const [trainDetails, setTrainDetails] = useState<Train | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Fetch detailed trip information via server API
+  // Fetch enhanced train information via server API
   useEffect(() => {
     const fetchDetails = async () => {
       if (train.gtfsId) {
         setLoading(true);
         try {
-          console.log(`🔍 Fetching trip details for ${train.gtfsId} via client API`);
+          console.log(`🔍 Fetching enhanced train details for ${train.gtfsId} via client API`);
           
           const response = await fetch(`/api/trains/${encodeURIComponent(train.gtfsId)}`);
           
@@ -29,8 +29,8 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
             return;
           }
           
-          const details: TrainDetails = await response.json();
-          console.log(`✅ Received trip details:`, details);
+          const details: Train = await response.json();
+          console.log(`✅ Received enhanced train details:`, details);
           setTrainDetails(details);
         } catch (error) {
           console.error('Failed to fetch train details:', error);
@@ -82,10 +82,6 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
       return cleaned.trim();
     };
 
-    if (trainDetails?.routeShortName) {
-      const cleaned = cleanHtml(trainDetails.routeShortName);
-      return cleaned ? `[${cleaned}]` : '';
-    }
     if (trainDetails?.trainName) {
       const cleaned = cleanHtml(trainDetails.trainName);
       return cleaned ? `[${cleaned}]` : '';
@@ -116,7 +112,7 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
             {getRouteCode()} {train.number}
           </h3>
           <div className="text-gray-600">
-            {trainDetails?.destination || train.destination?.name || 'Unknown destination'}
+            {trainDetails?.destination?.name || train.destination?.name || 'Unknown destination'}
           </div>
         </div>
         {onClose && (
@@ -137,8 +133,8 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
         </div>
         <div className="text-sm">
           <span className="font-medium">Késés:</span>{' '}
-          <span className={trainDetails?.overallDelay && trainDetails.overallDelay > 0 ? 'text-red-600' : 'text-green-600'}>
-            {getDelayText(trainDetails?.overallDelay ?? train.delay)}
+          <span className={trainDetails?.delay && trainDetails.delay > 0 ? 'text-red-600' : 'text-green-600'}>
+            {getDelayText(trainDetails?.delay ?? train.delay)}
           </span>
         </div>
       </div>
@@ -147,49 +143,93 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
       {loading && (
         <div className="text-center py-4">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-          <div className="text-sm text-gray-600 mt-2">Loading trip details...</div>
+          <div className="text-sm text-gray-600 mt-2">Loading enhanced details...</div>
         </div>
       )}
 
-      {/* Stops Table */}
-      {trainDetails?.stops && (
-        <div className="popup-table-container">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left py-2 px-1 font-semibold">Állomás</th>
-                <th className="text-center py-2 px-1 font-semibold">Érk.</th>
-                <th className="text-center py-2 px-1 font-semibold">Ind.</th>
-                <th className="text-center py-2 px-1 font-semibold">Vágány</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trainDetails.stops.map((stop, index) => (
-                <tr 
-                  key={index} 
-                  className={`border-b ${stop.isPassed ? 'passed bg-gray-50' : ''}`}
-                >
-                  <td className="py-2 px-1 font-medium">{stop.name}</td>
-                  <td className="py-2 px-1 text-center">
-                    {formatStopTime(stop.scheduledArrival, stop.actualArrival)}
-                  </td>
-                  <td className="py-2 px-1 text-center">
-                    {formatStopTime(stop.scheduledDeparture, stop.actualDeparture)}
-                  </td>
-                  <td className="py-2 px-1 text-center">
-                    {stop.platform || '-'}
-                  </td>
+      {/* Route timetable table */}
+      {trainDetails?.route && trainDetails.route.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="font-semibold text-sm">Menetrend</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-1 font-medium text-gray-700">Állomás</th>
+                  <th className="text-center py-2 px-1 font-medium text-gray-700">Érk.</th>
+                  <th className="text-center py-2 px-1 font-medium text-gray-700">Ind.</th>
+                  <th className="text-center py-2 px-1 font-medium text-gray-700">Vágány</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {trainDetails.route.map((stop, index) => {
+                  const now = new Date();
+                  const arrivalTime = stop.arrival ? new Date(stop.arrival) : null;
+                  const departureTime = stop.departure ? new Date(stop.departure) : null;
+                  const isPassed = (arrivalTime && arrivalTime < now) || (departureTime && departureTime < now);
+                  
+                  return (
+                    <tr 
+                      key={index} 
+                      className={`border-b border-gray-100 ${isPassed ? 'text-gray-500' : ''}`}
+                    >
+                      <td className="py-2 px-1 font-medium">
+                        {stop.station.name}
+                      </td>
+                      <td className="text-center py-2 px-1">
+                        {arrivalTime ? (
+                          <div className="flex flex-col items-center">
+                            <span className={isPassed ? 'line-through' : ''}>
+                              {formatTime(arrivalTime)}
+                            </span>
+                            {stop.delay && stop.delay > 0 && (
+                              <span className="text-red-600 text-xs">
+                                {formatTime(new Date(arrivalTime.getTime() + stop.delay * 60000))}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td className="text-center py-2 px-1">
+                        {departureTime ? (
+                          <div className="flex flex-col items-center">
+                            <span className={isPassed ? 'line-through' : ''}>
+                              {formatTime(departureTime)}
+                            </span>
+                            {stop.delay && stop.delay > 0 && (
+                              <span className="text-red-600 text-xs">
+                                {formatTime(new Date(departureTime.getTime() + stop.delay * 60000))}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td className="text-center py-2 px-1">
+                        {stop.platform ? (
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
+                            {stop.platform}
+                          </span>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* Fallback for no trip details */}
+      {/* Fallback for no enhanced details */}
       {!loading && !trainDetails && train.gtfsId && (
         <div className="text-center py-4 text-gray-600">
-          <div className="text-sm">Trip details not available</div>
+          <div className="text-sm">Enhanced train details not available</div>
         </div>
       )}
 

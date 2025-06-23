@@ -1,5 +1,5 @@
-import { Train, Station, Departure, TrainType, DepartureStatus } from '@/types';
-import { MavStation, MavTrain, MavDeparture } from './mav';
+import { Train, Station, Departure, TrainType, DepartureStatus, TrainSearchResult } from '@/types';
+import { MavStation, MavTrain, MavDeparture, MavArrival } from './mav';
 
 export function transformMavStation(mavStation: MavStation): Station {
   return {
@@ -51,6 +51,7 @@ export function transformMavTrain(mavTrain: MavTrain): Train {
 }
 
 export function transformMavDeparture(mavDeparture: MavDeparture, station: Station): Departure {
+  const departureTime = parseTimeString(mavDeparture.Indulas);
   return {
     train: {
       id: mavDeparture.VonatSzam,
@@ -61,15 +62,96 @@ export function transformMavDeparture(mavDeparture: MavDeparture, station: Stati
       heading: 0,
       delay: mavDeparture.Keses || 0
     },
-    departure: parseTimeString(mavDeparture.Indulas),
+    time: departureTime,
     platform: mavDeparture.Vagany,
-    destination: {
+    remoteStation: {
       id: 'unknown',
       name: mavDeparture.Celallomas,
       coordinates: { latitude: 0, longitude: 0 }
     },
     delay: mavDeparture.Keses || 0,
-    status: getDepartureStatus(mavDeparture)
+    status: getDepartureStatus(mavDeparture),
+    // Legacy fields for backward compatibility
+    departure: departureTime,
+    destination: {
+      id: 'unknown',
+      name: mavDeparture.Celallomas,
+      coordinates: { latitude: 0, longitude: 0 }
+    }
+  };
+}
+
+export function transformMavArrival(mavArrival: MavArrival, station: Station): Departure {
+  const arrivalTime = parseTimeString(mavArrival.Erkezes);
+  return {
+    train: {
+      id: mavArrival.VonatSzam,
+      number: mavArrival.VonatSzam,
+      type: mapMavTrainType(mavArrival.Tipus),
+      position: station.coordinates,
+      speed: 0,
+      heading: 0,
+      delay: mavArrival.Keses || 0
+    },
+    time: arrivalTime,
+    platform: mavArrival.Vagany,
+    remoteStation: {
+      id: 'unknown',
+      name: mavArrival.Kiindulas,
+      coordinates: { latitude: 0, longitude: 0 }
+    },
+    delay: mavArrival.Keses || 0,
+    status: getArrivalStatus(mavArrival),
+    // Legacy fields for backward compatibility
+    arrival: arrivalTime
+  };
+}
+
+export function transformSearchResult(
+  searchResult: { train: MavDeparture; fromStation: string; details?: any },
+  stationMap?: Map<string, Station>
+): TrainSearchResult {
+  const departure = searchResult.train;
+  const details = searchResult.details;
+  
+  // Calculate duration if we have route details
+  let durationMinutes = 0;
+  let originTime = new Date();
+  let destinationTime = new Date();
+  
+  if (details && details.stops && details.stops.length > 0) {
+    const firstStop = details.stops[0];
+    const lastStop = details.stops[details.stops.length - 1];
+    
+    originTime = firstStop.scheduledDeparture || firstStop.scheduledArrival || new Date();
+    destinationTime = lastStop.scheduledArrival || lastStop.scheduledDeparture || new Date();
+    
+    durationMinutes = Math.round((destinationTime.getTime() - originTime.getTime()) / (1000 * 60));
+  } else {
+    // Fallback: use the departure time from the search result
+    originTime = parseTimeString(departure.Indulas);
+    destinationTime = new Date(originTime.getTime() + 2 * 60 * 60 * 1000); // Assume 2 hours
+    durationMinutes = 120;
+  }
+  
+  return {
+    gtfsId: details?.gtfsId || `${departure.VonatSzam}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}_1`,
+    trainNumber: departure.VonatSzam,
+    trainName: details?.trainName,
+    trainType: mapMavTrainType(departure.Tipus),
+    origin: {
+      name: searchResult.fromStation === 'search' 
+        ? (details?.stops?.[0]?.name || 'Unknown')
+        : (stationMap?.get(searchResult.fromStation)?.name || searchResult.fromStation),
+      time: originTime
+    },
+    destination: {
+      name: departure.Celallomas,
+      time: destinationTime
+    },
+    durationMinutes,
+    liveDelayMinutes: departure.Keses > 0 ? departure.Keses : undefined,
+    isActive: details ? true : false // If we have details, the train is active
   };
 }
 
@@ -119,6 +201,22 @@ function getDepartureStatus(mavDeparture: MavDeparture): DepartureStatus {
   
   if (departureTime < now) {
     return DepartureStatus.DEPARTED;
+  }
+  
+  if (delay > 30) {
+    return DepartureStatus.DELAYED;
+  }
+  
+  return DepartureStatus.ON_TIME;
+}
+
+function getArrivalStatus(mavArrival: MavArrival): DepartureStatus {
+  const delay = mavArrival.Keses || 0;
+  const now = new Date();
+  const arrivalTime = parseTimeString(mavArrival.Erkezes);
+  
+  if (arrivalTime < now) {
+    return DepartureStatus.DEPARTED; // Use DEPARTED to indicate "ARRIVED"
   }
   
   if (delay > 30) {

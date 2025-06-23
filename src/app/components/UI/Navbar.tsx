@@ -1,19 +1,27 @@
 'use client';
 
 import Link from 'next/link';
-import { Train, Map, Navigation, Clock, Menu, X } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { Train, Map, Clock, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
+  const pathname = usePathname();
 
   const navItems = [
     { href: '/', label: 'Map', icon: Map },
     { href: '/trains', label: 'Trains', icon: Train },
-    { href: '/journey', label: 'Journey', icon: Navigation },
     { href: '/departures', label: 'Departures', icon: Clock },
   ];
+
+  const isActive = (href: string) => {
+    if (href === '/') {
+      return pathname === '/';
+    }
+    return pathname.startsWith(href);
+  };
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -28,11 +36,17 @@ export function Navbar() {
             <div className="hidden sm:ml-8 sm:flex sm:space-x-8">
               {navItems.map((item) => {
                 const Icon = item.icon;
+                const active = isActive(item.href);
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 hover:text-blue-600 border-b-2 border-transparent hover:border-blue-600 transition-colors"
+                    className={cn(
+                      "inline-flex items-center px-1 pt-1 text-sm font-medium border-b-2 transition-colors",
+                      active
+                        ? "text-blue-600 border-blue-600"
+                        : "text-gray-900 hover:text-blue-600 border-transparent hover:border-blue-600"
+                    )}
                   >
                     <Icon className="h-4 w-4 mr-2" />
                     {item.label}
@@ -58,12 +72,18 @@ export function Navbar() {
         <div className="pt-2 pb-3 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
+            const active = isActive(item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsOpen(false)}
-                className="flex items-center px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                className={cn(
+                  "flex items-center px-3 py-2 text-base font-medium",
+                  active
+                    ? "text-blue-600 bg-blue-50"
+                    : "text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                )}
               >
                 <Icon className="h-5 w-5 mr-3" />
                 {item.label}

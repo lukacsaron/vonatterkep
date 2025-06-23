@@ -43,6 +43,15 @@ export interface MavDeparture {
   Tipus: string;
 }
 
+export interface MavArrival {
+  VonatSzam: string;
+  Erkezes: string;
+  Kiindulas: string;
+  Vagany?: string;
+  Keses: number;
+  Tipus: string;
+}
+
 class MavApiClient {
   // Get all stations using MobileService API
   async getStations(): Promise<MavStation[]> {
@@ -99,6 +108,46 @@ class MavApiClient {
     } catch (error) {
       console.error('Error fetching departures from MÁV:', error);
       throw error;
+    }
+  }
+
+  // Get train arrivals for a station
+  async getArrivals(stationId: string, date: Date = new Date()): Promise<MavArrival[]> {
+    try {
+      const dateStr = date.toISOString().split('T')[0].replace(/-/g, '.');
+      
+      const response = await fetch(`${MAV_MOBILE_API_BASE}/GetAllomasInfo`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': MAV_USER_AGENT,
+        },
+        body: JSON.stringify({
+          UAID: MAV_UAID,
+          Nyelv: 'HU',
+          AllomasKod: stationId,
+          Datum: dateStr
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`MÁV API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.Erkezesek || [];
+    } catch (error) {
+      console.error('Error fetching arrivals from MÁV:', error);
+      throw error;
+    }
+  }
+
+  // Generic method to get both departures and arrivals
+  async getTimetable(stationId: string, type: 'departures' | 'arrivals', date: Date = new Date()): Promise<MavDeparture[] | MavArrival[]> {
+    if (type === 'departures') {
+      return this.getDepartures(stationId, date);
+    } else {
+      return this.getArrivals(stationId, date);
     }
   }
 
@@ -215,6 +264,166 @@ class MavApiClient {
   async getTrainDelay(gtfsId: string): Promise<number> {
     const details = await this.getTrainDetails(gtfsId);
     return details?.overallDelay || 0;
+  }
+
+  // Search for trains based on various criteria
+  async searchTrains(params: {
+    q?: string;
+    fromStationId?: string;
+    toStationId?: string;
+    date?: string;
+  }): Promise<{ train: MavDeparture; fromStation: string; details?: any }[]> {
+    const results: { train: MavDeparture; fromStation: string; details?: any }[] = [];
+    
+    try {
+      // If we only have a query (like "Tópart"), search live trains first
+      if (params.q && !params.fromStationId) {
+        try {
+          console.log(`🔍 Searching live trains for query: "${params.q}"`);
+          const liveTrains = await this.getTrainPositions();
+          const query = params.q.toLowerCase();
+          
+          for (const liveTrain of liveTrains) {
+            // Check if train number or destination matches the query
+            const trainMatches = liveTrain.VonatSzam.toLowerCase().includes(query) ||
+                               liveTrain.Celallomas.toLowerCase().includes(query);
+            
+            if (trainMatches && liveTrain.gtfsId) {
+              try {
+                // Get detailed information for matching live trains
+                const trainDetails = await this.getTrainDetails(liveTrain.gtfsId);
+                if (trainDetails) {
+                  // Create a departure-like object from live train data
+                  const mockDeparture: MavDeparture = {
+                    VonatSzam: liveTrain.VonatSzam,
+                    Celallomas: liveTrain.Celallomas,
+                    Indulas: new Date().toISOString(), // Use current time as fallback
+                    Keses: liveTrain.Keses,
+                    Vagany: '',
+                    Tipus: liveTrain.Tipus
+                  };
+                  
+                  results.push({
+                    train: mockDeparture,
+                    fromStation: trainDetails.stops?.[0]?.name || 'Unknown',
+                    details: {
+                      ...trainDetails,
+                      gtfsId: liveTrain.gtfsId // Pass through the real gtfsId
+                    }
+                  });
+                }
+              } catch (error) {
+                console.warn(`Failed to get details for live train ${liveTrain.VonatSzam}:`, error);
+              }
+            }
+          }
+          
+          if (results.length > 0) {
+            console.log(`✅ Found ${results.length} live trains matching "${params.q}"`);
+            return results;
+          }
+        } catch (error) {
+          console.warn('Failed to search live trains, falling back to station search:', error);
+        }
+      }
+      
+      // If fromStationId is provided, get departures from that station
+      if (params.fromStationId) {
+        const searchDate = params.date ? new Date(params.date) : new Date();
+        const departures = await this.getDepartures(params.fromStationId, searchDate);
+        
+        for (const departure of departures) {
+          let shouldInclude = true;
+          
+          // Filter by train number/query if provided
+          if (params.q) {
+            const query = params.q.toLowerCase();
+            shouldInclude = departure.VonatSzam.toLowerCase().includes(query) ||
+                          departure.Celallomas.toLowerCase().includes(query);
+          }
+          
+          if (shouldInclude) {
+            const result: { train: typeof departure; fromStation: string; details?: any } = {
+              train: departure,
+              fromStation: params.fromStationId
+            };
+            
+            // If toStationId is specified, fetch train details to check route
+            if (params.toStationId) {
+              try {
+                // Try to construct gtfsId from train number and date
+                const gtfsId = this.constructGtfsId(departure.VonatSzam, searchDate);
+                if (gtfsId) {
+                  const trainDetails = await this.getTrainDetails(gtfsId);
+                  if (trainDetails && this.routeIncludesStation(trainDetails, params.toStationId)) {
+                    result.details = trainDetails;
+                    results.push(result);
+                  }
+                }
+              } catch (error) {
+                console.warn(`Failed to get details for train ${departure.VonatSzam}:`, error);
+                // Include without route verification if details fetch fails
+                results.push(result);
+              }
+            } else {
+              results.push(result);
+            }
+          }
+        }
+      }
+      
+      // If only a query is provided (no stations), try to search by train number
+      if (params.q && !params.fromStationId) {
+        const searchDate = params.date ? new Date(params.date) : new Date();
+        const gtfsId = this.constructGtfsId(params.q, searchDate);
+        
+        if (gtfsId) {
+          try {
+            const trainDetails = await this.getTrainDetails(gtfsId);
+            if (trainDetails) {
+              // Create a synthetic departure entry for search results
+              const syntheticDeparture: MavDeparture = {
+                VonatSzam: params.q,
+                Indulas: new Date().toLocaleTimeString(),
+                Celallomas: trainDetails.destination,
+                Keses: trainDetails.overallDelay,
+                Tipus: 'REG' // Default type, could be improved
+              };
+              
+              results.push({
+                train: syntheticDeparture,
+                fromStation: 'search',
+                details: trainDetails
+              });
+            }
+          } catch (error) {
+            console.warn(`Failed to search for train ${params.q}:`, error);
+          }
+        }
+      }
+      
+      return results;
+    } catch (error) {
+      console.error('Error searching trains:', error);
+      throw error;
+    }
+  }
+
+  // Helper method to construct gtfsId from train number and date
+  private constructGtfsId(trainNumber: string, date: Date): string | null {
+    // This is a simplified approach - the actual gtfsId format may be more complex
+    // Format: trainNumber_date_direction (e.g., "406_20241223_1")
+    const dateStr = date.toISOString().split('T')[0].replace(/-/g, '');
+    return `${trainNumber}_${dateStr}_1`;
+  }
+
+  // Helper method to check if a route includes a specific station
+  private routeIncludesStation(trainDetails: TrainDetails, stationId: string): boolean {
+    // Check if any stop name matches the station
+    // This is simplified - in practice, you'd need station name to ID mapping
+    return trainDetails.stops.some(stop => 
+      stop.name.toLowerCase().includes(stationId.toLowerCase())
+    );
   }
 
   // Get real-time train positions using EMMA API (exact approach from holavonat-app)

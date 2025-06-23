@@ -4,6 +4,7 @@ import { Train, Station, Journey, User, Favorite } from '@/types';
 interface MapState {
   selectedTrain: Train | null;
   selectedStation: Station | null;
+  focusedTrain: Train | null;
   bounds: {
     north: number;
     south: number;
@@ -14,6 +15,7 @@ interface MapState {
   center: { lat: number; lng: number };
   setSelectedTrain: (train: Train | null) => void;
   setSelectedStation: (station: Station | null) => void;
+  setFocusedTrain: (train: Train | null) => void;
   setBounds: (bounds: MapState['bounds']) => void;
   setZoom: (zoom: number) => void;
   setCenter: (center: MapState['center']) => void;
@@ -22,6 +24,7 @@ interface MapState {
 export const useMapStore = create<MapState>((set) => ({
   selectedTrain: null,
   selectedStation: null,
+  focusedTrain: null,
   bounds: {
     north: 48.7,
     south: 45.5,
@@ -32,6 +35,7 @@ export const useMapStore = create<MapState>((set) => ({
   center: { lat: 47.1625, lng: 19.5033 }, // Budapest
   setSelectedTrain: (train) => set({ selectedTrain: train }),
   setSelectedStation: (station) => set({ selectedStation: station }),
+  setFocusedTrain: (train) => set({ focusedTrain: train }),
   setBounds: (bounds) => set({ bounds }),
   setZoom: (zoom) => set({ zoom }),
   setCenter: (center) => set({ center }),

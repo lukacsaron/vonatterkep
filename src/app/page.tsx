@@ -1,8 +1,12 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/app/components/UI/Navbar';
 import { LoadingSpinner } from '@/app/components/UI/LoadingSpinner';
+import { useMapStore } from '@/lib/store';
+import { useTrains } from '@/lib/hooks/useTrains';
 
 // Check if Mapbox token is available and use appropriate map component
 const hasMapboxToken = Boolean(process.env.NEXT_PUBLIC_MAPBOX_TOKEN);
@@ -28,6 +32,21 @@ const MapComponent = dynamic(
 );
 
 export default function Home() {
+  const searchParams = useSearchParams();
+  const { data: trains } = useTrains();
+  const { setSelectedTrain, setFocusedTrain } = useMapStore();
+
+  useEffect(() => {
+    const trainParam = searchParams.get('train');
+    if (trainParam && trains) {
+      const train = trains.find(t => t.id === trainParam);
+      if (train) {
+        setSelectedTrain(train);
+        setFocusedTrain(train);
+      }
+    }
+  }, [searchParams, trains, setSelectedTrain, setFocusedTrain]);
+
   return (
     <div className="flex flex-col h-screen bg-white">
       <Navbar />

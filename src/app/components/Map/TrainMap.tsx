@@ -25,7 +25,7 @@ export function TrainMap() {
   const [mapError, setMapError] = useState<string | null>(null);
   const [showRailwayOverlay, setShowRailwayOverlay] = useState(true);
   
-  const { center, zoom, selectedTrain, setSelectedTrain, setBounds } = useMapStore();
+  const { center, zoom, selectedTrain, focusedTrain, setSelectedTrain, setFocusedTrain, setBounds } = useMapStore();
   const { data: trains, isLoading, error } = useTrains();
 
   console.log('TrainMap render:', { 
@@ -45,7 +45,7 @@ export function TrainMap() {
 
     try {
       // Initialize map centered on Hungary
-      const initialCenter = [19.0408, 47.4979]; // Budapest coordinates [lng, lat]
+      const initialCenter: [number, number] = [19.0408, 47.4979]; // Budapest coordinates [lng, lat]
       const initialZoom = 7;
       
       console.log('🗺️ Initializing map with center:', initialCenter, 'zoom:', initialZoom);
@@ -86,20 +86,6 @@ export function TrainMap() {
           }
         });
 
-        // Add test markers at known Hungarian cities to verify coordinate system
-        const cities = [
-          { name: 'Budapest', coords: [19.0408, 47.4979], color: 'red' },
-          { name: 'Debrecen', coords: [21.6273, 47.5316], color: 'blue' },
-          { name: 'Szeged', coords: [20.1414, 46.2530], color: 'green' },
-          { name: 'Pécs', coords: [18.2323, 46.0727], color: 'purple' }
-        ];
-        
-        cities.forEach(city => {
-          const testMarker = new mapboxgl.Marker({ color: city.color })
-            .setLngLat(city.coords)
-            .addTo(map.current!);
-          console.log(`🎯 Test marker added at ${city.name}: [${city.coords[0]}, ${city.coords[1]}]`);
-        });
         
         setMapReady(true);
       });
@@ -161,11 +147,12 @@ export function TrainMap() {
       }
       setMapReady(false);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - only run once
 
   // Memoize train colors to prevent flickering
   const trainColorsCache = useRef<Map<string, { delay: number, color: string, category: DelayCategory }>>(new Map());
-  const updateTimeoutRef = useRef<NodeJS.Timeout>();
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update train positions using GeoJSON layer instead of individual markers
   useEffect(() => {
@@ -188,11 +175,11 @@ export function TrainMap() {
       return `${t.id}-${stableDelay}-${stableLat}-${stableLng}`;
     }).sort().join(',');
     
-    const lastUpdateRef = map.current._vonatterkeepLastUpdate;
+    const lastUpdateRef = (map.current as any)?._vonatterkeepLastUpdate;
     if (lastUpdateRef === currentTrainIds) {
       return; // No meaningful changes, skip update
     }
-    map.current._vonatterkeepLastUpdate = currentTrainIds;
+    (map.current as any)._vonatterkeepLastUpdate = currentTrainIds;
 
     // Create GeoJSON feature collection from trains
     const features = trains
@@ -225,6 +212,7 @@ export function TrainMap() {
             destination: train.destination?.name || 'Unknown',
             color: cachedColor.color,
             heading: train.heading || 0,
+            headingRaw: train.heading || 0, // Store original for debugging
             delayCategory: cachedColor.category // Store for consistent coloring
           },
           geometry: {
@@ -250,47 +238,62 @@ export function TrainMap() {
     console.log(`🗺️ Updating GeoJSON layer with ${features.length} train features`);
     
     // Check if source exists, if so just update the data
-    if (map.current.getSource('trains')) {
+    if (map.current && map.current.getSource('trains')) {
       // Just update the data, more efficient than recreating layers
       const source = map.current.getSource('trains') as mapboxgl.GeoJSONSource;
       source.setData(geojson);
-    } else {
+    } else if (map.current) {
       // First time - create source and layers
       map.current.addSource('trains', {
         type: 'geojson',
         data: geojson
       });
 
-      // Add train circles
-      map.current.addLayer({
-        id: 'trains',
-        type: 'circle',
-        source: 'trains',
-        paint: {
-          'circle-radius': 8,
-          'circle-color': ['get', 'color'],
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff'
-        }
-      });
-
-      // Add train direction arrows using text symbols (Unicode triangle)
+      // Holavonat-style: Triangles behind circles with dynamic directional offset
       map.current.addLayer({
         id: 'train-arrows',
         type: 'symbol',
         source: 'trains',
         layout: {
-          'text-field': '▲', // Unicode triangle
-          'text-size': 12,
+          'text-field': '▲',
+          'text-size': 27, // Large enough so circle covers base, tip extends out
           'text-rotate': ['get', 'heading'],
           'text-rotation-alignment': 'map',
+          'text-keep-upright': false,
+          // Dynamic offset: position triangle so tip extends in direction of travel
+          // More interpolation points for smoother positioning
+          'text-offset': [
+            'interpolate', ['linear'], ['get', 'heading'],
+            0,   ['literal', [0, -0.3]],     // North
+            45,  ['literal', [0.3, -0.3]], // Northeast  
+            90,  ['literal', [0.3, 0]],      // East
+            135, ['literal', [0.3, 0.3]],  // Southeast
+            180, ['literal', [0, 0.3]],      // South
+            225, ['literal', [-0.3, 0.3]], // Southwest
+            270, ['literal', [-0.3, 0]],     // West
+            315, ['literal', [-0.3, -0.3]], // Northwest
+            360, ['literal', [0, -0.3]]      // North (wrap around)
+          ],
           'text-allow-overlap': true,
           'text-ignore-placement': true
         },
         paint: {
-          'text-color': '#ffffff',
-          'text-halo-color': ['get', 'color'],
-          'text-halo-width': 1
+          'text-color': ['get', 'color'],
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 1.25
+        }
+      });
+
+      // Circles on top to cover triangle bases
+      map.current.addLayer({
+        id: 'trains',
+        type: 'circle',
+        source: 'trains',
+        paint: {
+          'circle-radius': 8, // Covers triangle base, lets tip extend
+          'circle-color': ['get', 'color'],
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#ffffff'
         }
       });
 
@@ -352,11 +355,31 @@ export function TrainMap() {
         train: f.properties.number, 
         delay: f.properties.delay, 
         color: f.properties.color,
+        heading: f.properties.heading, // Add heading to debug output
         gtfsId: trains.find(t => t.number === f.properties.number)?.gtfsId,
         speed: trains.find(t => t.number === f.properties.number)?.speed,
         isMoving: trains.find(t => t.number === f.properties.number)?.isMoving
       }));
       console.log('  Sample train details:', colors);
+      
+      // Debug heading values specifically
+      const headings = features.map(f => ({ 
+        train: f.properties.number,
+        heading: f.properties.heading,
+        gtfsId: trains.find(t => t.number === f.properties.number)?.gtfsId
+      }));
+      console.log('  🧭 Train headings:', headings.slice(0, 10));
+      
+      // Debug specific problematic train
+      const problematicTrain = trains.find(t => t.gtfsId === '1:24892393.22206360');
+      if (problematicTrain) {
+        console.log('🚨 Problematic train found:', {
+          number: problematicTrain.number,
+          heading: problematicTrain.heading,
+          gtfsId: problematicTrain.gtfsId,
+          position: problematicTrain.position
+        });
+      }
       
       // Show which trains have real delay data
       const trainsWithRealDelay = features.filter(f => f.properties.delay > 0);
@@ -388,6 +411,25 @@ export function TrainMap() {
       map.current.setLayoutProperty(layerId, 'visibility', showRailwayOverlay ? 'visible' : 'none');
     }
   }, [showRailwayOverlay, mapReady]);
+
+  // Handle focused train - zoom to it and clear the focused state
+  useEffect(() => {
+    if (!map.current || !mapReady || !focusedTrain) return;
+
+    console.log('🎯 Focusing on train:', focusedTrain.number, 'at position:', [focusedTrain.position.longitude, focusedTrain.position.latitude]);
+    
+    // Zoom to the train's position with high zoom level
+    map.current.easeTo({
+      center: [focusedTrain.position.longitude, focusedTrain.position.latitude],
+      zoom: 14, // High zoom level to focus on the train
+      duration: 1500 // Smooth animation
+    });
+
+    // Clear the focused train after animation
+    setTimeout(() => {
+      setFocusedTrain(null);
+    }, 1500);
+  }, [focusedTrain, mapReady, setFocusedTrain]);
 
   // Helper function to create train marker element
   function createTrainMarker(train: Train, color: string): HTMLElement {
