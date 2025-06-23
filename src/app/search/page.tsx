@@ -14,11 +14,11 @@ export default function SearchPage() {
         <div className="max-w-4xl mx-auto pt-16 px-4">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              Search Trains
+              Vonat keresés
             </h1>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              Find real-time information about Hungarian trains. Search by train number, 
-              name, or route to see current positions, delays, and destinations.
+              Találd meg a magyar vonatok valós idejű információit. Keress vonatszám, 
+              név vagy útvonal alapján, hogy lásd a jelenlegi pozíciókat, késéseket és célállomásokat.
             </p>
           </div>
 
@@ -26,10 +26,10 @@ export default function SearchPage() {
             <div className="text-center">
               <div className="mb-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                  Quick Search
+                  Gyors keresés
                 </h2>
                 <p className="text-gray-600 text-sm">
-                  Press <kbd className="bg-gray-100 border border-gray-300 rounded px-2 py-1 text-xs font-mono">⌘K</kbd> to open search
+                  Nyomd meg a <kbd className="bg-gray-100 border border-gray-300 rounded px-2 py-1 text-xs font-mono">⌘K</kbd> gombot a keresés megnyitásához
                 </p>
               </div>
             </div>
@@ -37,25 +37,25 @@ export default function SearchPage() {
             <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="text-2xl mb-2">🚄</div>
-                <h3 className="font-medium text-gray-900 mb-1">Train Numbers</h3>
+                <h3 className="font-medium text-gray-900 mb-1">Vonatszámok</h3>
                 <p className="text-sm text-gray-600">
-                  Search by train number like &quot;IC 560&quot; or &quot;S80&quot;
+                  Keress vonatszám alapján, mint &quot;IC 560&quot; vagy &quot;S80&quot;
                 </p>
               </div>
 
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="text-2xl mb-2">📍</div>
-                <h3 className="font-medium text-gray-900 mb-1">Routes</h3>
+                <h3 className="font-medium text-gray-900 mb-1">Útvonalak</h3>
                 <p className="text-sm text-gray-600">
-                  Find trains by destination or route like &quot;Budapest Szeged&quot;
+                  Találj vonatokat célállomás vagy útvonal alapján, mint &quot;Budapest Szeged&quot;
                 </p>
               </div>
 
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="text-2xl mb-2">🏷️</div>
-                <h3 className="font-medium text-gray-900 mb-1">Train Names</h3>
+                <h3 className="font-medium text-gray-900 mb-1">Vonatnevek</h3>
                 <p className="text-sm text-gray-600">
-                  Search by special train names like &quot;LATORCA&quot;
+                  Keress speciális vonatnevek alapján, mint &quot;LATORCA&quot;
                 </p>
               </div>
             </div>

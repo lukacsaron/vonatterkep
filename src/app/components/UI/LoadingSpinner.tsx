@@ -20,9 +20,9 @@ export function LoadingSpinner({ size = 'md', className }: LoadingSpinnerProps) 
           sizeClasses[size]
         )}
         role="status"
-        aria-label="Loading"
+        aria-label="Töltés"
       >
-        <span className="sr-only">Loading...</span>
+        <span className="sr-only">Töltés...</span>
       </div>
     </div>
   );

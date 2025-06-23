@@ -98,17 +98,17 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
               <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                Failed to load timetable
+                Nem sikerült betölteni a menetrendet
               </h2>
               <p className="text-gray-600 mb-4">
-                There was an error loading the station timetable. Please try again.
+                Hiba történt az állomás menetrend betöltésekor. Próbáld újra.
               </p>
               <button
                 onClick={handleRefresh}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <RefreshCw className="h-4 w-4" />
-                Try Again
+                Próbáld újra
               </button>
             </div>
           </div>
@@ -125,10 +125,10 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Station Timetable
+            Állomás Menetrend
           </h1>
           <p className="text-gray-600">
-            View real-time departures and arrivals
+            Valós idejű indulások és érkezések megtekintése
           </p>
         </div>
 
@@ -138,12 +138,12 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
             {/* Station Search */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Station
+                Állomás
               </label>
               <StationSearch
                 value={selectedStation}
                 onSelect={handleStationSelect}
-                placeholder="Search for a station..."
+                placeholder="Állomás keresése..."
                 className="w-full"
               />
             </div>
@@ -151,7 +151,7 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
             {/* Date and Time Picker */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Date & Time
+                Dátum és Idő
               </label>
               <DatePicker
                 date={selectedDate}
@@ -163,15 +163,15 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
             {/* Tabs for Departures/Arrivals */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Timetable Type
+                Menetrend Típusa
               </label>
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'departures' | 'arrivals')}>
                 <StyledTabsList>
                   <StyledTabsTrigger value="departures">
-                    Departures
+                    Indulások
                   </StyledTabsTrigger>
                   <StyledTabsTrigger value="arrivals">
-                    Arrivals
+                    Érkezések
                   </StyledTabsTrigger>
                 </StyledTabsList>
               </Tabs>
@@ -185,7 +185,7 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900">
               {selectedStation?.name ? `${selectedStation.name} - ` : ''}
-              {activeTab === 'departures' ? 'Departures' : 'Arrivals'}
+              {activeTab === 'departures' ? 'Indulások' : 'Érkezések'}
             </h2>
             <button
               onClick={handleRefresh}
@@ -197,19 +197,19 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
               )}
             >
               <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
-              Refresh
+              Frissítés
             </button>
           </div>
 
           {/* Table Headers (Desktop only) */}
           <div className="hidden sm:grid sm:grid-cols-12 sm:gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-700">
-            <div className="sm:col-span-2">Time</div>
+            <div className="sm:col-span-2">Idő</div>
             <div className="sm:col-span-4">
-              {activeTab === 'departures' ? 'Destination' : 'Origin'}
+              {activeTab === 'departures' ? 'Célállomás' : 'Indulás'}
             </div>
-            <div className="sm:col-span-3">Train</div>
-            <div className="sm:col-span-1 text-center">Platform</div>
-            <div className="sm:col-span-2 text-right">Status</div>
+            <div className="sm:col-span-3">Vonat</div>
+            <div className="sm:col-span-1 text-center">Vágány</div>
+            <div className="sm:col-span-2 text-right">Állapot</div>
           </div>
 
           {/* Timetable Rows */}
@@ -225,9 +225,9 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
               ))
             ) : (
               <div className="p-8 text-center text-gray-500">
-                <p>No {activeTab} found for the selected time.</p>
+                <p>Nincs {activeTab === 'departures' ? 'indulás' : 'érkezés'} a kiválasztott időpontban.</p>
                 <p className="text-sm mt-2">
-                  Try selecting a different date or time.
+                  Próbálj meg másik dátumot vagy időpontot választani.
                 </p>
               </div>
             )}
@@ -244,7 +244,7 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
         {/* Auto-refresh indicator */}
         {timetableData && timetableData.length > 0 && (
           <div className="mt-4 text-center text-sm text-gray-500">
-            Automatically refreshes every 30 seconds
+            Automatikusan frissül 30 másodpercenként
           </div>
         )}
         </div>

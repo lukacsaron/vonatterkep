@@ -29,11 +29,11 @@ export function getDelayColor(category: DelayCategory): string {
 }
 
 export function formatDelay(minutes: number): string {
-  if (minutes === 0) return 'On time';
-  if (minutes < 60) return `+${minutes} min`;
+  if (minutes === 0) return 'Pontos';
+  if (minutes < 60) return `+${minutes} perc`;
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
-  return `+${hours}h ${mins}m`;
+  return `+${hours}ó ${mins}p`;
 }
 
 export function formatTime(date: Date | string): string {

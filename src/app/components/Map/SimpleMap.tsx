@@ -27,8 +27,8 @@ export function SimpleMap() {
     return (
       <div className="w-full h-full flex items-center justify-center bg-gray-100">
         <div className="text-center">
-          <p className="text-red-600 mb-2">Failed to load train data</p>
-          <p className="text-sm text-gray-500">Please check your connection and try again</p>
+          <p className="text-red-600 mb-2">Nem sikerült betölteni a vonatadatokat</p>
+          <p className="text-sm text-gray-500">Ellenőrizd a kapcsolatot és próbáld újra</p>
         </div>
       </div>
     );
@@ -65,17 +65,17 @@ export function SimpleMap() {
                 className="bg-white rounded-lg shadow-md p-4 cursor-pointer hover:shadow-lg transition-shadow"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold">Train {train.number}</h3>
+                  <h3 className="font-semibold">Vonat {train.number}</h3>
                   <div 
                     className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: color }}
                   />
                 </div>
                 <p className="text-sm text-gray-600 mb-1">
-                  → {train.destination?.name || 'Unknown'}
+                  → {train.destination?.name || 'Ismeretlen'}
                 </p>
                 <p className="text-sm text-gray-500">
-                  Next: {train.nextStation?.name || 'Unknown'}
+                  Következő: {train.nextStation?.name || 'Ismeretlen'}
                 </p>
                 <p className="text-sm font-medium mt-2">
                   {Math.round(train.speed)} km/h
@@ -99,7 +99,7 @@ export function SimpleMap() {
       {/* Info banner */}
       <div className="absolute bottom-4 left-4 bg-blue-100 border border-blue-300 text-blue-800 px-4 py-2 rounded">
         <p className="text-sm">
-          📍 Showing {trains?.length || 0} trains • Add NEXT_PUBLIC_MAPBOX_TOKEN for interactive map
+          📍 {trains?.length || 0} vonat megjelenítve • Adj hozzá NEXT_PUBLIC_MAPBOX_TOKEN-t interaktív térképhez
         </p>
       </div>
     </div>

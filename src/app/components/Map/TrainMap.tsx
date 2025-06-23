@@ -96,7 +96,7 @@ export function TrainMap() {
 
       map.current.on('error', (e) => {
         console.error('Map error:', e);
-        setMapError('Failed to load map');
+        setMapError('Nem sikerült betölteni a térképet');
       });
 
       // Use a debounced bounds update to prevent excessive re-renders
@@ -140,7 +140,7 @@ export function TrainMap() {
 
     } catch (error) {
       console.error('Error initializing map:', error);
-      setMapError('Failed to initialize map');
+      setMapError('Nem sikerült inicializálni a térképet');
     }
 
     return () => {
@@ -470,9 +470,9 @@ export function TrainMap() {
     return (
       <div className="w-full h-full flex items-center justify-center bg-gray-100">
         <div className="text-center">
-          <p className="text-gray-600 mb-2">Map cannot be loaded</p>
-          <p className="text-sm text-gray-500">Please configure NEXT_PUBLIC_MAPBOX_TOKEN</p>
-          <p className="text-xs text-gray-400 mt-2">Token found: {!!MAPBOX_TOKEN ? 'Yes' : 'No'}</p>
+          <p className="text-gray-600 mb-2">A térkép nem tölthető be</p>
+          <p className="text-sm text-gray-500">Állítsd be a NEXT_PUBLIC_MAPBOX_TOKEN-t</p>
+          <p className="text-xs text-gray-400 mt-2">Token találva: {!!MAPBOX_TOKEN ? 'Igen' : 'Nem'}</p>
         </div>
       </div>
     );
@@ -483,7 +483,7 @@ export function TrainMap() {
       <div className="w-full h-full flex items-center justify-center bg-gray-100">
         <div className="text-center">
           <p className="text-red-600 mb-2">{mapError}</p>
-          <p className="text-sm text-gray-500">Check console for details</p>
+          <p className="text-sm text-gray-500">Nézd meg a konzolt a részletekért</p>
         </div>
       </div>
     );
@@ -520,7 +520,7 @@ export function TrainMap() {
               : 'bg-white text-gray-700 hover:bg-gray-50'
           )}
         >
-          🚂 Railway Tracks
+          🚂 Vasúti pályák
         </button>
 
         {/* --- ADDED: Manual Refresh Button --- */}
@@ -528,11 +528,11 @@ export function TrainMap() {
           onClick={() => refetch()}
           disabled={isFetching}
           className="flex items-center gap-2 px-3 py-2 bg-white text-gray-700 rounded-lg shadow-md hover:bg-gray-50 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
-          title="Refresh train data"
+          title="Vonatadatok frissítése"
         >
           <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
           <span className="text-sm font-medium">
-            {isFetching ? 'Refreshing...' : 'Refresh'}
+            {isFetching ? 'Frissítés...' : 'Frissítés'}
           </span>
         </button>
       </div>
@@ -543,7 +543,7 @@ export function TrainMap() {
         <div className="absolute top-16 left-4 bg-white rounded-lg shadow-md p-3">
           <div className="flex items-center gap-2">
             <LoadingSpinner size="sm" />
-            <span className="text-sm">Loading initial train data...</span>
+            <span className="text-sm">Kezdeti vonatadatok betöltése...</span>
           </div>
         </div>
       )}
@@ -551,7 +551,7 @@ export function TrainMap() {
       {/* Error message */}
       {error && (
         <div className="absolute bottom-4 left-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          Failed to load train data
+          Nem sikerült betölteni a vonatadatokat
         </div>
       )}
     </div>

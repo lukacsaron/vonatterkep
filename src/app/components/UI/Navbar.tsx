@@ -11,8 +11,8 @@ export function Navbar() {
   const pathname = usePathname();
 
   const navItems = [
-    { href: '/', label: 'Map', icon: Map },
-    { href: '/search', label: 'Search', icon: Search, shortcut: '⌘K' },
+    { href: '/', label: 'Térkép', icon: Map },
+    { href: '/search', label: 'Keresés', icon: Search, shortcut: '⌘K' },
   ];
 
   const isActive = (href: string) => {

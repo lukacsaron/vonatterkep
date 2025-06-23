@@ -121,7 +121,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search trains by number, name, or route..."
+            placeholder="Keress vonatnév, szám, vagy induló / végállomás alapján..."
             className="flex-1 text-lg border-none outline-none placeholder-gray-400"
           />
           <button
@@ -137,29 +137,29 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
           {isLoading && hasQuery && (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-              <span className="ml-3 text-gray-500">Searching trains...</span>
+              <span className="ml-3 text-gray-500">Keresek...</span>
             </div>
           )}
 
           {!hasQuery && !isLoading && (
             <div className="p-8 text-center text-gray-500">
               <Train className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Search for trains</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Keresés</h3>
               <p className="text-sm text-gray-500 mb-4">
-                Type a train number, name, or station to find real-time train information
+                Írj be egy vonatszámot, nevet vagy induló / végállomást, hogy megtaláld a vonatod
               </p>
               <div className="grid grid-cols-1 gap-2 text-xs text-gray-400 max-w-md mx-auto">
                 <div className="flex items-center gap-2">
                   <span className="bg-gray-100 px-2 py-1 rounded font-mono">IC 560</span>
-                  <span>Search by train number</span>
+                  <span>Keresés vonatszám alapján</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="bg-gray-100 px-2 py-1 rounded font-mono">LATORCA</span>
-                  <span>Search by train name</span>
+                  <span>Keresés vonatnév alapján</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="bg-gray-100 px-2 py-1 rounded font-mono">Budapest Szeged</span>
-                  <span>Search by route</span>
+                  <span>Keresés útvonal alapján</span>
                 </div>
               </div>
             </div>
@@ -168,9 +168,9 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
           {hasQuery && !isLoading && results.length === 0 && (
             <div className="p-8 text-center text-gray-500">
               <Search className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No trains found</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Nincs találat</h3>
               <p className="text-sm text-gray-500">
-                Try searching for a different train number, name, or station
+                Próbálj meg egy másik vonatszámot, nevet vagy állomást
               </p>
             </div>
           )}
@@ -251,19 +251,19 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1">
               <kbd className="bg-white border border-gray-300 rounded px-1">↑↓</kbd>
-              to navigate
+navigálás
             </span>
             <span className="flex items-center gap-1">
               <kbd className="bg-white border border-gray-300 rounded px-1">Enter</kbd>
-              to select
+kiválasztás
             </span>
             <span className="flex items-center gap-1">
               <kbd className="bg-white border border-gray-300 rounded px-1">Esc</kbd>
-              to close
+bezárás
             </span>
           </div>
           {results.length > 0 && (
-            <span>{results.length} result{results.length !== 1 ? 's' : ''}</span>
+            <span>{results.length} találat</span>
           )}
         </div>
       </div>

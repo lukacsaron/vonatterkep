@@ -62,7 +62,7 @@ export function TimetableRow({
               {departure.remoteStation.name}
             </div>
             <div className="text-xs text-gray-500 sm:hidden">
-              {type === 'departures' ? 'To' : 'From'}
+              {type === 'departures' ? 'Felé' : 'Onnan'}
             </div>
           </div>
         </div>
@@ -107,7 +107,7 @@ export function TimetableRow({
         </div>
         {departure.platform && (
           <span className="text-xs font-medium bg-blue-100 text-blue-800 px-2 py-1 rounded">
-            Platform {departure.platform}
+            Vágány {departure.platform}
           </span>
         )}
       </div>

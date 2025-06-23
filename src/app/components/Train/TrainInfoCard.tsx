@@ -112,14 +112,14 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
             {getRouteCode()} {train.number}
           </h3>
           <div className="text-gray-600">
-            {trainDetails?.destination?.name || train.destination?.name || 'Unknown destination'}
+            {trainDetails?.destination?.name || train.destination?.name || 'Ismeretlen cél'}
           </div>
         </div>
         {onClose && (
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 p-1"
-            aria-label="Close"
+            aria-label="Bezárás"
           >
             <X size={20} />
           </button>
@@ -143,7 +143,7 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
       {loading && (
         <div className="text-center py-4">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-          <div className="text-sm text-gray-600 mt-2">Loading enhanced details...</div>
+          <div className="text-sm text-gray-600 mt-2">További részletek betöltése...</div>
         </div>
       )}
 
@@ -226,7 +226,7 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
       {/* Fallback for no enhanced details */}
       {!loading && !trainDetails && train.gtfsId && (
         <div className="text-center py-4 text-gray-600">
-          <div className="text-sm">Enhanced train details not available</div>
+          <div className="text-sm">További vonatrészletek nem elérhetőek</div>
         </div>
       )}
 
@@ -238,15 +238,15 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
           <div className="flex items-start gap-2">
             <Navigation className="h-4 w-4 text-gray-400 mt-0.5" />
             <div>
-              <div className="text-sm text-gray-600">Destination</div>
-              <div className="font-medium">{train.destination?.name || 'Unknown'}</div>
+              <div className="text-sm text-gray-600">Célállomás</div>
+              <div className="font-medium">{train.destination?.name || 'Ismeretlen'}</div>
             </div>
           </div>
 
           <div className="flex items-start gap-2">
             <Gauge className="h-4 w-4 text-gray-400 mt-0.5" />
             <div>
-              <div className="text-sm text-gray-600">Speed</div>
+              <div className="text-sm text-gray-600">Sebesség</div>
               <div className="font-medium">{Math.round(train.speed)} km/h</div>
             </div>
           </div>

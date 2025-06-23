@@ -16,7 +16,7 @@ interface StationSearchProps {
 
 export function StationSearch({ 
   onSelect, 
-  placeholder = 'Search station...', 
+  placeholder = 'Állomás keresése...', 
   value,
   className 
 }: StationSearchProps) {
@@ -124,7 +124,7 @@ export function StationSearch({
             </ul>
           ) : (
             <div className="p-4 text-center text-gray-500">
-              No stations found
+              Nincs találat
             </div>
           )}
         </div>

@@ -153,13 +153,13 @@ export function TrainSearchResultItem({ train, className }: TrainSearchResultIte
         <div className="flex items-center gap-2">
           <div className={`h-2 w-2 rounded-full ${train.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
           <span className="text-xs text-gray-500">
-            {train.isActive ? 'Currently running' : 'Scheduled service'}
+            {train.isActive ? 'Jelenleg közlekedő' : 'Tervezett járat'}
           </span>
         </div>
         
         {train.liveDelayMinutes !== undefined && train.liveDelayMinutes > 0 && (
           <span className="text-xs text-red-600 font-medium">
-            +{train.liveDelayMinutes} min delay
+            +{train.liveDelayMinutes} perc késés
           </span>
         )}
       </div>
@@ -169,19 +169,19 @@ export function TrainSearchResultItem({ train, className }: TrainSearchResultIte
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setShowPopup(false)}>
           <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Train {train.trainNumber}</h2>
+              <h2 className="text-lg font-semibold">{train.trainNumber} vonat</h2>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleViewOnMap}
                   className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
                 >
-                  View on map
+                  Megtekintés a térképen
                 </button>
                 <button
                   onClick={handleViewDetails}
                   className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 transition-colors"
                 >
-                  Full details
+                  Teljes részletek
                 </button>
                 <button
                   onClick={() => setShowPopup(false)}
