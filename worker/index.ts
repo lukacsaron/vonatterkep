@@ -1,4 +1,7 @@
-import 'dotenv/config'; // Load .env file
+// Load .env file only in development
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv/config');
+}
 import { mavApi } from '../src/lib/api/mav';
 import { transformMavTrain } from '../src/lib/api/transformers';
 import { redisClient } from '../src/lib/redis';
@@ -41,6 +44,9 @@ async function runFetchCycle() {
 // --- Main Execution ---
 console.log(`Background worker started. Fetching data every ${FETCH_INTERVAL_MS / 1000} seconds.`);
 
-// Run the cycle immediately on start, then set the interval.
-runFetchCycle(); 
-setInterval(runFetchCycle, FETCH_INTERVAL_MS);
+// Wait a bit for Redis connection to establish, then start
+setTimeout(() => {
+  console.log('Starting initial fetch cycle...');
+  runFetchCycle(); 
+  setInterval(runFetchCycle, FETCH_INTERVAL_MS);
+}, 2000);

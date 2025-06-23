@@ -1,6 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-require("dotenv/config"); // Load .env file
+// Load .env file only in development
+if (process.env.NODE_ENV !== 'production') {
+    require('dotenv/config');
+}
 const mav_1 = require("../src/lib/api/mav");
 const transformers_1 = require("../src/lib/api/transformers");
 const redis_1 = require("../src/lib/redis");
@@ -34,6 +37,9 @@ async function runFetchCycle() {
 }
 // --- Main Execution ---
 console.log(`Background worker started. Fetching data every ${FETCH_INTERVAL_MS / 1000} seconds.`);
-// Run the cycle immediately on start, then set the interval.
-runFetchCycle();
-setInterval(runFetchCycle, FETCH_INTERVAL_MS);
+// Wait a bit for Redis connection to establish, then start
+setTimeout(() => {
+    console.log('Starting initial fetch cycle...');
+    runFetchCycle();
+    setInterval(runFetchCycle, FETCH_INTERVAL_MS);
+}, 2000);
