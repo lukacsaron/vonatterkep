@@ -163,10 +163,7 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
               </thead>
               <tbody>
                 {trainDetails.route.map((stop, index) => {
-                  const now = new Date();
-                  const arrivalTime = stop.arrival ? new Date(stop.arrival) : null;
-                  const departureTime = stop.departure ? new Date(stop.departure) : null;
-                  const isPassed = (arrivalTime && arrivalTime < now) || (departureTime && departureTime < now);
+                  const isPassed = stop.isPassed || false;
                   
                   return (
                     <tr 
@@ -177,14 +174,14 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
                         {stop.station.name}
                       </td>
                       <td className="text-center py-2 px-1">
-                        {arrivalTime ? (
+                        {stop.arrival ? (
                           <div className="flex flex-col items-center">
                             <span className={isPassed ? 'line-through' : ''}>
-                              {formatTime(arrivalTime)}
+                              {formatTime(new Date(stop.arrival))}
                             </span>
-                            {stop.delay && stop.delay > 0 && (
-                              <span className="text-red-600 text-xs">
-                                {formatTime(new Date(arrivalTime.getTime() + stop.delay * 60000))}
+                            {stop.actualArrival && (
+                              <span className={stop.delay && stop.delay > 0 ? 'text-red-600 text-xs' : 'text-green-600 text-xs'}>
+                                {formatTime(new Date(stop.actualArrival))}
                               </span>
                             )}
                           </div>
@@ -193,14 +190,14 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
                         )}
                       </td>
                       <td className="text-center py-2 px-1">
-                        {departureTime ? (
+                        {stop.departure ? (
                           <div className="flex flex-col items-center">
                             <span className={isPassed ? 'line-through' : ''}>
-                              {formatTime(departureTime)}
+                              {formatTime(new Date(stop.departure))}
                             </span>
-                            {stop.delay && stop.delay > 0 && (
-                              <span className="text-red-600 text-xs">
-                                {formatTime(new Date(departureTime.getTime() + stop.delay * 60000))}
+                            {stop.actualDeparture && (
+                              <span className={stop.delay && stop.delay > 0 ? 'text-red-600 text-xs' : 'text-green-600 text-xs'}>
+                                {formatTime(new Date(stop.actualDeparture))}
                               </span>
                             )}
                           </div>

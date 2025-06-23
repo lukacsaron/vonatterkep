@@ -46,8 +46,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
               arrival: stop.scheduledArrival,
               departure: stop.scheduledDeparture,
+              actualArrival: stop.actualArrival,
+              actualDeparture: stop.actualDeparture,
               platform: stop.platform || undefined,
-              delay: stop.arrivalDelay
+              delay: stop.arrivalDelay,
+              isPassed: stop.isPassed
             }));
             
             // Add enhanced details to train object

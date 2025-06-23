@@ -3,17 +3,17 @@ import { Train, Departure, TrainSearchResult } from '@/types';
 import { api } from '@/lib/api/client';
 
 export function useTrains() {
-  // Don't use bounds in queryKey to prevent constant refetching during zoom
-  // Hungary is small enough that we can fetch all trains without performance issues
+  // We will return the entire result of useQuery to get access to refetch and isFetching
   return useQuery({
-    queryKey: ['trains'], // Stable key - no bounds dependency
-    queryFn: () => api.get<Train[]>('/trains'), // Fetch all trains
-    refetchInterval: 30000, // 30 seconds
-    staleTime: 15000, // 15 seconds
-    // Keep data fresh but prevent excessive refetching during user interactions
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchIntervalInBackground: false,
+    queryKey: ['trains'],
+    queryFn: () => api.get<Train[]>('/trains'),
+    // --- KEY CHANGES ---
+    // 1. Fetch data every 30 seconds. This was already correctly configured.
+    refetchInterval: 30000,
+    // 2. Data is considered stale after 15 seconds, prompting a refresh sooner on window focus.
+    staleTime: 15000,
+    // 3. Keep refetching on window focus to get the latest data when the user returns.
+    refetchOnWindowFocus: true,
   });
 }
 

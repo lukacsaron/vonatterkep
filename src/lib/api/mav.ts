@@ -55,27 +55,67 @@ export interface MavArrival {
 class MavApiClient {
   // Get all stations using MobileService API
   async getStations(): Promise<MavStation[]> {
+    console.log('🏢 Fetching stations from MÁV MobileService API...');
+    
     try {
+      const payload = {
+        UAID: MAV_UAID,
+        Nyelv: 'HU'
+      };
+
+      console.log('📡 Making stations request to:', MAV_MOBILE_API_BASE + '/GetAlapadatok');
+      console.log('📋 Payload:', payload);
+
       const response = await fetch(`${MAV_MOBILE_API_BASE}/GetAlapadatok`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': MAV_USER_AGENT,
         },
-        body: JSON.stringify({
-          UAID: MAV_UAID,
-          Nyelv: 'HU'
-        })
+        body: JSON.stringify(payload)
       });
+
+      console.log('📶 MobileService stations response status:', response.status, response.statusText);
 
       if (!response.ok) {
         throw new Error(`MÁV API error: ${response.status}`);
       }
 
       const data = await response.json();
-      return data.Allomasok || [];
+      console.log('📦 MobileService stations response type:', typeof data, 'keys:', Object.keys(data || {}));
+      
+      // Try different response formats
+      let stations = data.Allomasok || data || [];
+      
+      if (!Array.isArray(stations)) {
+        console.warn('⚠️ Unexpected stations response format:', data);
+        stations = [];
+      }
+
+      const validStations = stations.filter((station: any) => 
+        station && 
+        station.UicKod && 
+        station.Nev && 
+        station.GPS?.Lat && 
+        station.GPS?.Lng
+      );
+
+      console.log(`✅ Successfully fetched ${validStations.length} valid stations from MobileService API`);
+      
+      // Check for specific stations mentioned in the issue
+      const searchStations = ['Veszprém', 'Ukk', 'Tapolca'];
+      for (const searchStation of searchStations) {
+        const found = validStations.find((s: any) => 
+          s.Nev?.toLowerCase().includes(searchStation.toLowerCase())
+        );
+        console.log(`🔍 Station "${searchStation}" found:`, found ? 
+          { name: found.Nev, uic: found.UicKod } : 'NOT FOUND'
+        );
+      }
+
+      return validStations;
     } catch (error) {
-      console.error('Error fetching stations from MÁV:', error);
+      console.error('❌ Failed to fetch stations from MobileService API:', error);
       throw error;
     }
   }
@@ -238,7 +278,7 @@ class MavApiClient {
           actualArrival: realtimeArrival,
           scheduledDeparture,
           actualDeparture: realtimeDeparture,
-          platform: '', // Not available in EMMA API
+          platform: '', // TODO: Not available in EMMA API - consider fetching from GetVonatInfo endpoint
           arrivalDelay: Math.round(arrivalDelay / 60), // Convert to minutes
           departureDelay: 0, // Not available
           isPassed

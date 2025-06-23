@@ -74,8 +74,11 @@ export interface Stop {
   station: Station;
   arrival?: Date;
   departure?: Date;
+  actualArrival?: Date;
+  actualDeparture?: Date;
   platform?: string;
   delay?: number;
+  isPassed?: boolean;
 }
 
 export interface Journey {

@@ -10,6 +10,9 @@ import { LoadingSpinner } from '../UI/LoadingSpinner';
 import { DelayLegend } from '../UI/DelayLegend';
 import { Train, DelayCategory } from '@/types';
 import { getDelayCategory, getDelayColor } from '@/lib/utils';
+// --- ADDED: Import RefreshCw icon and cn utility ---
+import { RefreshCw } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // Set Mapbox access token
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -25,8 +28,9 @@ export function TrainMap() {
   const [mapError, setMapError] = useState<string | null>(null);
   const [showRailwayOverlay, setShowRailwayOverlay] = useState(true);
   
-  const { center, zoom, selectedTrain, focusedTrain, setSelectedTrain, setFocusedTrain, setBounds } = useMapStore();
-  const { data: trains, isLoading, error } = useTrains();
+  const { selectedTrain, focusedTrain, setSelectedTrain, setFocusedTrain, setBounds } = useMapStore();
+  // --- CHANGED: Destructure `isFetching` and `refetch` from the useTrains hook ---
+  const { data: trains, isLoading, isFetching, error, refetch } = useTrains();
 
   console.log('TrainMap render:', { 
     hasToken: !!MAPBOX_TOKEN, 
@@ -504,26 +508,42 @@ export function TrainMap() {
         <DelayLegend />
       </div>
 
-      {/* Railway Overlay Toggle */}
-      <div className="absolute top-4 left-4 z-10">
+      {/* --- ADDED: UI Controls Wrapper --- */}
+      <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+        {/* Railway Overlay Toggle */}
         <button
           onClick={() => setShowRailwayOverlay(!showRailwayOverlay)}
-          className={`px-3 py-2 rounded-lg shadow-md text-sm font-medium transition-colors ${
+          className={cn(
+            'px-3 py-2 rounded-lg shadow-md text-sm font-medium transition-colors',
             showRailwayOverlay 
               ? 'bg-blue-600 text-white hover:bg-blue-700' 
               : 'bg-white text-gray-700 hover:bg-gray-50'
-          }`}
+          )}
         >
           🚂 Railway Tracks
         </button>
+
+        {/* --- ADDED: Manual Refresh Button --- */}
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="flex items-center gap-2 px-3 py-2 bg-white text-gray-700 rounded-lg shadow-md hover:bg-gray-50 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+          title="Refresh train data"
+        >
+          <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
+          <span className="text-sm font-medium">
+            {isFetching ? 'Refreshing...' : 'Refresh'}
+          </span>
+        </button>
       </div>
       
-      {/* Loading indicator */}
-      {isLoading && (
+      {/* --- UPDATED: Use `isLoading` for the initial load message --- */}
+      {/* This only shows on the very first load, not on background refreshes */}
+      {isLoading && !trains && (
         <div className="absolute top-16 left-4 bg-white rounded-lg shadow-md p-3">
           <div className="flex items-center gap-2">
             <LoadingSpinner size="sm" />
-            <span className="text-sm">Loading trains...</span>
+            <span className="text-sm">Loading initial train data...</span>
           </div>
         </div>
       )}

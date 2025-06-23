@@ -15,7 +15,6 @@ export default function TrainsPage() {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [fromStation, setFromStation] = useState<Station | null>(null);
   const [toStation, setToStation] = useState<Station | null>(null);
-  const [searchDate, setSearchDate] = useState<Date>(new Date());
 
   // Debounce search query
   useEffect(() => {
@@ -31,7 +30,6 @@ export default function TrainsPage() {
     q: debouncedQuery || undefined,
     fromStationId: fromStation?.id,
     toStationId: toStation?.id,
-    date: searchDate,
   };
 
   // Use search or featured trains
@@ -129,21 +127,6 @@ export default function TrainsPage() {
               )}
             </div>
 
-            {/* Date picker */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="w-full sm:w-auto">
-                <label htmlFor="search-date" className="block text-sm font-medium text-gray-700 mb-2">
-                  Date
-                </label>
-                <input
-                  id="search-date"
-                  type="date"
-                  value={searchDate.toISOString().split('T')[0]}
-                  onChange={(e) => setSearchDate(new Date(e.target.value))}
-                  className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
           </form>
         </div>
 
@@ -216,7 +199,6 @@ export default function TrainsPage() {
                 <li>• Enter a train number (e.g., &quot;S60&quot;, &quot;IC 560&quot;)</li>
                 <li>• Search by train name or route (e.g., &quot;LATORCA&quot;, &quot;Budapest-Szeged&quot;)</li>
                 <li>• Select origin and destination stations to find connecting trains</li>
-                <li>• Choose a different date to see future or past schedules</li>
               </ul>
             </div>
           )}
