@@ -1,9 +1,24 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, createContext, useContext } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { SearchModal } from './SearchModal';
 import { useKeyboardShortcut } from '@/lib/hooks/useKeyboardShortcut';
+
+// Create search context
+const SearchContext = createContext<{
+  openSearch: () => void;
+  closeSearch: () => void;
+  isSearchOpen: boolean;
+} | null>(null);
+
+export function useSearch() {
+  const context = useContext(SearchContext);
+  if (!context) {
+    throw new Error('useSearch must be used within GlobalSearchProvider');
+  }
+  return context;
+}
 
 export function GlobalSearchProvider({ children }: { children: React.ReactNode }) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -35,12 +50,12 @@ export function GlobalSearchProvider({ children }: { children: React.ReactNode }
   );
 
   return (
-    <>
+    <SearchContext.Provider value={{ openSearch, closeSearch, isSearchOpen }}>
       {children}
       <SearchModal 
         isOpen={isSearchOpen} 
         onClose={closeSearch}
       />
-    </>
+    </SearchContext.Provider>
   );
 }

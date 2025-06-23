@@ -5,14 +5,24 @@ import { usePathname } from 'next/navigation';
 import { Train, Map, Search, Menu, X, User } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useSearch } from '@/app/components/Search/GlobalSearchProvider';
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: any;
+  shortcut?: string;
+  onClick?: () => void;
+};
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
+  const { openSearch } = useSearch();
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { href: '/', label: 'Térkép', icon: Map },
-    { href: '/search', label: 'Keresés', icon: Search, shortcut: '⌘K' },
+    { href: '/search', label: 'Keresés', icon: Search, shortcut: '⌘K', onClick: openSearch },
   ];
 
   const isActive = (href: string) => {
@@ -36,6 +46,33 @@ export function Navbar() {
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.href);
+                
+                if (item.onClick) {
+                  // Handle search button specially
+                  return (
+                    <button
+                      key={item.href}
+                      onClick={() => {
+                        item.onClick?.();
+                      }}
+                      className={cn(
+                        "inline-flex items-center px-1 pt-1 text-sm font-medium border-b-2 transition-colors",
+                        active
+                          ? "text-blue-600 border-blue-600"
+                          : "text-gray-900 hover:text-blue-600 border-transparent hover:border-blue-600"
+                      )}
+                    >
+                      <Icon className="h-4 w-4 mr-2" />
+                      {item.label}
+                      {item.shortcut && (
+                        <span className="ml-2 text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                          {item.shortcut}
+                        </span>
+                      )}
+                    </button>
+                  );
+                }
+                
                 return (
                   <Link
                     key={item.href}
@@ -94,6 +131,29 @@ export function Navbar() {
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
+            
+            if (item.onClick) {
+              // Handle search button specially
+              return (
+                <button
+                  key={item.href}
+                  onClick={() => {
+                    item.onClick?.();
+                    setIsOpen(false);
+                  }}
+                  className={cn(
+                    "flex items-center px-3 py-2 text-base font-medium w-full text-left",
+                    active
+                      ? "text-blue-600 bg-blue-50"
+                      : "text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                  )}
+                >
+                  <Icon className="h-5 w-5 mr-3" />
+                  {item.label}
+                </button>
+              );
+            }
+            
             return (
               <Link
                 key={item.href}

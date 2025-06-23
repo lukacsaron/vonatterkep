@@ -104,9 +104,20 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-4 min-w-[320px] max-w-[500px] max-h-[80vh] overflow-y-auto">
+    <div className="bg-white rounded-lg shadow-lg p-4 min-w-[320px] max-w-[500px] max-h-[80vh] overflow-y-auto relative">
+      {/* Fixed close button */}
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="absolute top-2 right-2 bg-white text-gray-400 hover:text-gray-600 p-2 rounded-full shadow-md hover:shadow-lg transition-all z-10"
+          aria-label="Bezárás"
+        >
+          <X size={16} />
+        </button>
+      )}
+      
       {/* Header */}
-      <div className="flex items-start justify-between mb-3">
+      <div className="mb-3 pr-10">
         <div>
           <h3 className="text-lg font-semibold">
             {getRouteCode()} {train.number}
@@ -115,15 +126,6 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
             {trainDetails?.destination?.name || train.destination?.name || 'Ismeretlen cél'}
           </div>
         </div>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1"
-            aria-label="Bezárás"
-          >
-            <X size={20} />
-          </button>
-        )}
       </div>
 
       {/* Status Info */}

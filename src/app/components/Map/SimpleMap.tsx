@@ -91,7 +91,7 @@ export function SimpleMap() {
 
       {/* Train info popup */}
       {selectedTrain && (
-        <div className="absolute top-4 right-4 z-20">
+        <div className="absolute top-4 right-4 z-50">
           <TrainInfoCard 
             train={selectedTrain} 
             onClose={() => setSelectedTrain(null)} 

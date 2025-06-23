@@ -24,7 +24,7 @@ export default function KiVagyokPage() {
               Szia! Áron vagyok 👋
             </h1>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-              Egy hobbivasutas informatikus, aki látva a Holavonat.hu körüli felhajtást és a Vonatinfó hiányát, 
+              Egy hobbicoder és lifehack fan, aki látva a Holavonat.hu körüli felhajtást és a Vonatinfó hiányát, 
               úgy döntött, hogy ő is készít egy alternatívát. 😅
             </p>
           </div>
@@ -54,12 +54,11 @@ export default function KiVagyokPage() {
                 <h2 className="text-2xl font-semibold text-gray-900">Mit csinálok amúgy</h2>
               </div>
               <p className="text-gray-700 leading-relaxed mb-6">
-                Napközben a LogiNet International-nél és a 22.design-nál segítek cégeknek abban, hogy jobban 
-                kommunikáljanak és eladják a termékeiket. UX-et fordítok ROI-ra, marketing kampányokat vezetek, 
+                Napközben a LogiNet International-nél és a 22.design-nál segítek cégeknek abban, hogy hatékonyabban használják ki az AI és a digitalizáció lehetőségeit és ezáltal árbevételt növeljenek. UX-et fordítok ROI-ra (sic!), marketing kampányokat vezetek, 
                 és időnként még frontend kódot is írok.
               </p>
               <p className="text-gray-700 leading-relaxed">
-                De a szívem mélyén mindig is hobbivasutas informatikus voltam. 🚂
+                De a szívem mélyén mindig is a vasúti térképek szerelmese voltam. 🚂
               </p>
             </div>
           </div>
@@ -74,11 +73,11 @@ export default function KiVagyokPage() {
                 úgy gondoltam, én is megpróbálom - hátha sikerül egy kevésbé vitatott alternatívát készíteni.
               </p>
               <p className="leading-relaxed mb-6">
-                Nem politikai motiváció vezérelt, nem vagyok se fanatikus Tisza-aktivista, se a MÁV ellensége. 
+                Nem politikai motiváció vezérelt, nem vagyok se fanatikus aktivista (csak sima), se a MÁV ellensége. 
                 Csak valaki, aki azt gondolja, hogy az utasoknak joguk van tudni, hol jár a vonatuk.
               </p>
               <p className="leading-relaxed">
-                Hiszek abban, hogy a technológia közjó lehet, és hogy a polgárok is hozzájárulhatnak a 
+                Hiszek abban, hogy a technológia a közjó része kell, hogy legyen, és hogy a polgárok is hozzájárulhatnak a 
                 közszolgáltatások javításához - még ha ez néha kényes politikai kérdéseket is felvet.
               </p>
             </div>

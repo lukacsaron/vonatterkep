@@ -493,7 +493,7 @@ export function TrainMap() {
       
       {/* Train info popup */}
       {selectedTrain && (
-        <div className="absolute top-4 right-4 z-10">
+        <div className="absolute top-4 right-4 z-50">
           <TrainInfoCard 
             train={selectedTrain} 
             onClose={() => setSelectedTrain(null)} 
