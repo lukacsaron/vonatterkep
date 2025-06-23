@@ -24,7 +24,7 @@ export default function KiVagyokPage() {
               Szia! Áron vagyok 👋
             </h1>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-              Egy hobbicoder és lifehack fan, aki látva a Holavonat.hu körüli felhajtást és a Vonatinfó hiányát, 
+              Egy hobbicoder, aki látva a Holavonat.hu körüli felhajtást és a Vonatinfó hiányát, 
               úgy döntött, hogy ő is készít egy alternatívát. 😅
             </p>
           </div>
