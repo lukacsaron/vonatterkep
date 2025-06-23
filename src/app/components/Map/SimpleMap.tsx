@@ -10,7 +10,25 @@ import { Train } from '@/types';
 export function SimpleMap() {
   const { selectedTrain, setSelectedTrain } = useMapStore();
   const { data: trains, isLoading, error } = useTrains();
-  const hasMapboxToken = !!process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  
+  // Check for Mapbox token in client-side (this component should only render when token is missing)
+  const hasMapboxToken = Boolean(process.env.NEXT_PUBLIC_MAPBOX_TOKEN);
+  console.log('🚨 WARNING: SimpleMap is rendering but should only be used when Mapbox token is missing!');
+  console.log('SimpleMap render - hasMapboxToken:', hasMapboxToken, 'token:', process.env.NEXT_PUBLIC_MAPBOX_TOKEN?.substring(0, 10) + '...');
+  
+  // If token exists, this component shouldn't be rendering - show a clear message
+  if (hasMapboxToken) {
+    console.log('🚨 ERROR: SimpleMap rendering despite having Mapbox token! This suggests TrainMap failed to load.');
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gray-100">
+        <div className="text-center">
+          <p className="text-red-600 mb-2">Rendering problem detected</p>
+          <p className="text-sm text-gray-500">SimpleMap loaded despite having Mapbox token</p>
+          <p className="text-xs text-gray-400 mt-2">Check console for TrainMap errors</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleTrainClick = (train: Train) => {
     setSelectedTrain(train);
