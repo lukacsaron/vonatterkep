@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# VonatterKep Deployment Verification Script
+# Vonat Térkép Deployment Verification Script
 # Run this after deployment to verify everything is working
 
 set -e
 
-echo "🔍 VonatterKep Deployment Verification"
+echo "🔍 Vonat Térkép Deployment Verification"
 echo "======================================"
 
 # Colors for output
@@ -182,7 +182,7 @@ echo "======="
 if [ $failed_tests -eq 0 ]; then
     echo -e "${GREEN}🎉 All critical tests passed!${NC}"
     echo ""
-    echo "Deployment appears to be successful. Your VonatterKep instance is ready!"
+    echo "Deployment appears to be successful. Your Vonat Térkép instance is ready!"
     echo ""
     echo "You can now:"
     echo "- Access the application at: $DEPLOYMENT_URL"

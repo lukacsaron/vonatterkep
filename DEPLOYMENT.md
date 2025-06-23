@@ -1,8 +1,8 @@
-# VonatterKep Deployment Guide for Coolify
+# Vonat Térkép Deployment Guide for Coolify
 
 ## Prerequisites
 - Coolify instance running
-- Git repository with VonatterKep code
+- Git repository with Vonat Térkép code
 - Mapbox account and access token
 - Domain name (optional)
 

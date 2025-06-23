@@ -1,7 +1,7 @@
-# VonatterKep Project Guide
+# Vonat Térkép Project Guide
 
 ## Project Overview
-VonatterKep is a modern web application for real-time Hungarian railway (MÁV) tracking and journey planning. It provides live train positions, delay information, route planning, and station details.
+Vonat Térkép is a modern web application for real-time Hungarian railway (MÁV) tracking and journey planning. It provides live train positions, delay information, route planning, and station details.
 
 ## Tech Stack
 - **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui

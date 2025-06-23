@@ -6,12 +6,12 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "VonatterKep - Hungarian Railway Tracker",
+  title: "Vonat Térkép - Hungarian Railway Tracker",
   description: "Real-time train tracking and journey planning for Hungarian railways",
   keywords: ["MÁV", "train", "railway", "Hungary", "tracking", "journey planner"],
-  authors: [{ name: "VonatterKep Team" }],
+  authors: [{ name: "Vonat Térkép Team" }],
   openGraph: {
-    title: "VonatterKep - Hungarian Railway Tracker",
+    title: "Vonat Térkép - Hungarian Railway Tracker",
     description: "Real-time train tracking and journey planning for Hungarian railways",
     type: "website",
     locale: "hu_HU",

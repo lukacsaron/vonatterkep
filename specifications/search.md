@@ -3,7 +3,7 @@
 
 ### 1. Vision & Guiding Principles
 
-Our goal is to evolve VonatterKep from a real-time map into a comprehensive railway information hub. These new features will empower users to not only see where trains *are*, but to find the trains they *need* and understand station activity at a glance.
+Our goal is to evolve Vonat Térkép from a real-time map into a comprehensive railway information hub. These new features will empower users to not only see where trains *are*, but to find the trains they *need* and understand station activity at a glance.
 
 **Guiding Principles:**
 

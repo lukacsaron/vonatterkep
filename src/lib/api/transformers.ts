@@ -1,4 +1,4 @@
-import { Train, Station, Departure, TrainType, DepartureStatus, TrainSearchResult } from '@/types';
+import { Train, Station, Departure, TrainType, DepartureStatus, TrainSearchResult } from '../../types';
 import { MavStation, MavTrain, MavDeparture, MavArrival } from './mav';
 
 export function transformMavStation(mavStation: MavStation): Station {

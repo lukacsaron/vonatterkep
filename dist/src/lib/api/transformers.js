@@ -5,7 +5,7 @@ exports.transformMavTrain = transformMavTrain;
 exports.transformMavDeparture = transformMavDeparture;
 exports.transformMavArrival = transformMavArrival;
 exports.transformSearchResult = transformSearchResult;
-const types_1 = require("@/types");
+const types_1 = require("../../types");
 function transformMavStation(mavStation) {
     var _a, _b;
     return {

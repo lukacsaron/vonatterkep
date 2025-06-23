@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Environment Setup Script for VonatterKep
+# Environment Setup Script for Vonat Térkép
 # Helps generate secure secrets and configure environment
 
 set -e
 
-echo "🔧 VonatterKep Environment Setup"
+echo "🔧 Vonat Térkép Environment Setup"
 echo "================================"
 
 # Colors for output
@@ -31,7 +31,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 # Start creating the environment file
-echo "# VonatterKep Environment Configuration" > "$ENV_FILE"
+echo "# Vonat Térkép Environment Configuration" > "$ENV_FILE"
 echo "# Generated on $(date)" >> "$ENV_FILE"
 echo "" >> "$ENV_FILE"
 

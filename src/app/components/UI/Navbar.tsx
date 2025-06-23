@@ -29,7 +29,7 @@ export function Navbar() {
           <div className="flex">
             <Link href="/" className="flex items-center">
               <Train className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-xl font-semibold">VonatterKep</span>
+              <span className="ml-2 text-xl font-semibold">Vonat Térkép</span>
             </Link>
             
             <div className="hidden sm:ml-8 sm:flex sm:space-x-8">

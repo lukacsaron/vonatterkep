@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# VonatterKep Startup Script
-echo "🚀 Starting VonatterKep application..."
+# Vonat Térkép Startup Script
+echo "🚀 Starting Vonat Térkép application..."
 
 # Check if required files exist
 if [ ! -f "server.js" ]; then
@@ -39,7 +39,7 @@ node server.js &
 WEB_PID=$!
 echo "✅ Web server started (PID: $WEB_PID)"
 
-echo "🎉 VonatterKep is running!"
+echo "🎉 Vonat Térkép is running!"
 echo "   Web: http://localhost:${PORT:-3000}"
 echo "   Health: http://localhost:${PORT:-3000}/api/health"
 
