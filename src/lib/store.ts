@@ -19,6 +19,7 @@ interface MapState {
   setBounds: (bounds: MapState['bounds']) => void;
   setZoom: (zoom: number) => void;
   setCenter: (center: MapState['center']) => void;
+  zoomToTrain: (train: Train) => void;
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -39,6 +40,12 @@ export const useMapStore = create<MapState>((set) => ({
   setBounds: (bounds) => set({ bounds }),
   setZoom: (zoom) => set({ zoom }),
   setCenter: (center) => set({ center }),
+  zoomToTrain: (train) => set({ 
+    selectedTrain: train,
+    focusedTrain: train,
+    center: { lat: train.latitude, lng: train.longitude },
+    zoom: 7
+  }),
 }));
 
 interface UserState {

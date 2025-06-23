@@ -4,8 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
-    "start": "next start",
+    "build": "next build && tsc --project tsconfig.worker.json",
+    "start": "npm run start:web",
+    "start:web": "next start",
+    "start:worker": "node dist/worker/index.js",
+    "dev:worker": "tsx worker/index.ts",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,json,css,md}\""
@@ -18,11 +21,13 @@
     "@tanstack/react-query": "^5.81.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dotenv": "^16.4.5",
     "lucide-react": "^0.522.0",
     "mapbox-gl": "^3.13.0",
     "next": "15.3.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "redis": "^4.6.15",
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^3.3.1",
     "zustand": "^5.0.5"
@@ -39,6 +44,8 @@
     "eslint-config-prettier": "^10.1.5",
     "prettier": "^3.6.0",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }

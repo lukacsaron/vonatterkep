@@ -70,13 +70,14 @@ REDIS_URL=redis://localhost:6379
 JWT_SECRET=your_jwt_secret
 ```
 
-## Key Features to Implement
-1. Real-time train tracking on interactive map
-2. Journey planning with multiple routes
-3. Station departure/arrival boards
-4. User accounts with favorites
-5. Delay notifications
-6. Offline support (PWA)
+## Key Features
+1. Real-time train tracking on interactive map ✅
+2. Global search with Cmd+K shortcut ✅
+3. Station departure/arrival boards ✅
+4. Journey planning with multiple routes
+5. User accounts with favorites
+6. Delay notifications
+7. Offline support (PWA)
 
 ## Data Sources
 - **MÁV EMMA GraphQL API**: Real-time train positions (primary)
@@ -134,13 +135,41 @@ The app integrates with real MÁV APIs using patterns from reference implementat
 - Next.js Docs: https://nextjs.org/docs
 - shadcn/ui: https://ui.shadcn.com
 
+## Search Functionality
+
+### Global Search (Cmd+K)
+The app features a powerful global search accessible via:
+- **Keyboard Shortcut**: `Cmd+K` (Mac) or `Ctrl+K` (Windows/Linux)
+- **Navigation**: Click "Search" in the navbar
+- **Direct URL**: `/search`
+
+### Search Features
+- **Fuzzy Matching**: Searches train numbers, names, and routes
+- **Real-time Results**: Updates as you type with 150ms debounce
+- **Keyboard Navigation**: Arrow keys, Enter to select, Escape to close
+- **Smart Relevance**: Exact matches ranked higher than partial matches
+- **Map Integration**: Selecting a train zooms the map and focuses on it
+
+### Search Types
+1. **Train Numbers**: "IC 560", "S80", "9001" - exact and partial matches
+2. **Train Names**: "LATORCA", "TISZA" - special named trains
+3. **Routes/Destinations**: "Budapest Szeged", "Veszprém" - by station names
+4. **Mixed Search**: Automatically detects and ranks by relevance
+
+### Implementation
+- `useTrainSearch` hook: Fuzzy search with relevance scoring
+- `SearchModal` component: Full keyboard navigation and UI
+- `GlobalSearchProvider`: App-wide Cmd+K shortcut handling
+- `zoomToTrain` store action: Map integration for search results
+
 ## Common Tasks
 
 ### Adding a New Page
-1. Create route in `src/app/(routes)/`
+1. Create route in `src/app/`
 2. Add types in `src/types/`
 3. Create API client in `src/lib/api/`
 4. Add components in `src/app/components/`
+5. Include `<Navbar />` for consistent navigation
 
 ### Adding API Endpoint
 1. Create route in `src/app/api/`

@@ -1,34 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { redisClient } from '@/lib/redis';
 import { mavApi } from '@/lib/api/mav';
 import { transformMavStation } from '@/lib/api/transformers';
+import { Station } from '@/types';
 
-// Cache stations in memory for 1 hour since they don't change often
-let stationsCache: { data: any[], timestamp: number } | null = null;
-const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
-
-// Clear cache on startup to ensure fresh data
-stationsCache = null;
+const CACHE_KEY = 'cache:stations:all';
+const CACHE_TTL_SECONDS = 12 * 60 * 60; // 12 hours
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get('search');
     
-    // Check cache first
-    const now = Date.now();
-    if (stationsCache && (now - stationsCache.timestamp < CACHE_DURATION)) {
-      console.log('Using cached station data');
+    // Try to get stations from Redis cache first
+    const cachedData = await redisClient.get(CACHE_KEY);
+    
+    let stations: Station[];
+    
+    if (cachedData) {
+      // Cache Hit: Use cached data
+      console.log('Using cached station data from Redis');
+      stations = JSON.parse(cachedData);
     } else {
-      console.log('Fetching fresh station data from MÁV...');
+      // Cache Miss: Fetch from MÁV API and fill cache
+      console.log('Cache miss - fetching fresh station data from MÁV...');
+      
       try {
         const mavStations = await mavApi.getStations();
-        stationsCache = {
-          data: mavStations,
-          timestamp: now
-        };
-        console.log(`Cached ${mavStations.length} stations from MÁV API`);
+        
+        // Transform stations to our format
+        const transformedStations = mavStations
+          .filter(station => station.GPS) // Only include stations with GPS coordinates
+          .map(transformMavStation);
+        
+        // Asynchronously cache the data in Redis (don't await to keep response fast)
+        redisClient.set(CACHE_KEY, JSON.stringify(transformedStations), {
+          EX: CACHE_TTL_SECONDS,
+        }).catch((err: Error) => console.error('Failed to cache stations:', err));
+        
+        stations = transformedStations;
+        console.log(`Fetched and cached ${stations.length} stations from MÁV API`);
+        
       } catch (stationError) {
         console.warn('MÁV station API failed, using fallback station data:', stationError);
+        
         // Comprehensive fallback set of Hungarian stations including the missing ones
         const fallbackStations = [
           // Major Budapest stations
@@ -76,56 +91,41 @@ export async function GET(request: NextRequest) {
           { UicKod: '5516901', Nev: 'Balatonszentgyörgy', GPS: { Lat: 46.7667, Lng: 17.3833 } },
           { UicKod: '5517201', Nev: 'Dombóvár', GPS: { Lat: 46.3739, Lng: 18.1328 } }
         ];
-        stationsCache = {
-          data: fallbackStations,
-          timestamp: now
-        };
-        console.log(`Using comprehensive fallback data with ${fallbackStations.length} Hungarian stations`);
-        // Log some key stations to verify they're included
-        const keyStations = ['Tapolca', 'Veszprém', 'Ukk'];
-        keyStations.forEach(station => {
-          const found = fallbackStations.find(s => s.Nev.includes(station));
-          console.log(`🔍 Key station "${station}" in fallback:`, found ? `${found.Nev} (${found.UicKod})` : 'NOT FOUND');
-        });
+        
+        // Transform fallback stations
+        stations = fallbackStations.map(transformMavStation);
+        
+        // Cache fallback data for a shorter period (1 hour)
+        redisClient.set(CACHE_KEY, JSON.stringify(stations), {
+          EX: 3600, // 1 hour for fallback data
+        }).catch((err: Error) => console.error('Failed to cache fallback stations:', err));
+        
+        console.log(`Using comprehensive fallback data with ${stations.length} Hungarian stations`);
       }
     }
-    
-    // Transform MÁV stations to our format
-    let stations = stationsCache.data
-      .filter(station => station.GPS) // Only include stations with GPS coordinates
-      .map(transformMavStation);
     
     // Apply search filter if provided
     if (search) {
       const searchLower = search.toLowerCase();
-      console.log(`🔍 Searching for: "${search}" (lowercase: "${searchLower}")`);
-      console.log(`📋 Available stations before filter: ${stations.length}`);
-      
-      // Check specifically for Tapolca
-      const tapolcaStation = stations.find(s => s.name.toLowerCase().includes('tapolca'));
-      console.log(`🎯 Tapolca station found in list:`, tapolcaStation ? tapolcaStation.name : 'NOT FOUND');
-      
-      stations = stations.filter(station =>
+      stations = stations.filter((station: Station) =>
         station.name.toLowerCase().includes(searchLower)
       );
-      
-      console.log(`📋 Stations after filter: ${stations.length}`);
-      console.log(`🔍 Filtered stations:`, stations.map(s => s.name));
     }
     
     return NextResponse.json(stations, {
       headers: {
+        'X-Cache-Status': cachedData ? 'HIT' : 'MISS',
         'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
       }
     });
     
   } catch (error) {
-    console.error('Error fetching stations from MÁV:', error);
+    console.error('Error fetching stations:', error);
     
     // Return error response
     return NextResponse.json(
       { error: 'Failed to fetch station data', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      { status: 503 }
     );
   }
 }

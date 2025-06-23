@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Train, Map, Clock, Menu, X } from 'lucide-react';
+import { Train, Map, Search, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -12,8 +12,7 @@ export function Navbar() {
 
   const navItems = [
     { href: '/', label: 'Map', icon: Map },
-    { href: '/trains', label: 'Trains', icon: Train },
-    { href: '/departures', label: 'Departures', icon: Clock },
+    { href: '/search', label: 'Search', icon: Search, shortcut: '⌘K' },
   ];
 
   const isActive = (href: string) => {
@@ -50,6 +49,11 @@ export function Navbar() {
                   >
                     <Icon className="h-4 w-4 mr-2" />
                     {item.label}
+                    {item.shortcut && (
+                      <span className="ml-2 text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                        {item.shortcut}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

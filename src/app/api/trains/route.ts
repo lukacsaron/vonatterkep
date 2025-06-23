@@ -1,48 +1,35 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { mavApi } from '@/lib/api/mav';
-import { transformMavTrain } from '@/lib/api/transformers';
+import { NextResponse } from 'next/server';
+import { redisClient } from '@/lib/redis';
 
-export async function GET(request: NextRequest) {
+const CACHE_KEY = 'cache:trains:live';
+
+export async function GET() {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const boundsStr = searchParams.get('bounds');
-    
-    let bounds;
-    if (boundsStr) {
-      try {
-        bounds = JSON.parse(boundsStr);
-      } catch (e) {
-        console.warn('Invalid bounds parameter:', boundsStr);
-      }
+    const cachedData = await redisClient.get(CACHE_KEY);
+
+    if (cachedData) {
+      // Cache Hit: Return the cached data
+      const trains = JSON.parse(cachedData);
+      return NextResponse.json(trains, {
+        headers: {
+          'X-Cache-Status': 'HIT'
+        }
+      });
+    } else {
+      // Cache Miss: The worker might be down or hasn't run yet.
+      // Return an empty array to prevent client errors.
+      console.warn('Cache miss for live train data. Returning empty array.');
+      return NextResponse.json([], {
+        headers: {
+          'X-Cache-Status': 'MISS'
+        }
+      });
     }
-    
-    console.log('Fetching real-time train data from MÁV...');
-    
-    // Get real-time train positions from MÁV EMMA API
-    const mavTrains = await mavApi.getTrainPositions(bounds);
-    
-    // Transform MÁV data to our format
-    const trains = mavTrains
-      .filter(train => train.UtolsoGPS) // Only include trains with GPS data
-      .map(transformMavTrain);
-    
-    console.log(`Fetched ${trains.length} trains from MÁV API`);
-    
-    return NextResponse.json(trains, {
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
-    });
-    
   } catch (error) {
-    console.error('Error fetching trains from MÁV:', error);
-    
-    // Return error response but don't crash the API
+    console.error('Error fetching trains from cache:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch train data', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      { error: 'Failed to fetch train data from service cache.' },
+      { status: 503 } // 503 Service Unavailable is appropriate here
     );
   }
 }
