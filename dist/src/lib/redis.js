@@ -3,10 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.redisClient = void 0;
 const redis_1 = require("redis");
 const redisUrl = process.env.REDIS_URL;
-// For development: allow build to work without Redis
-if (!redisUrl && process.env.NODE_ENV === 'production') {
-    throw new Error('REDIS_URL environment variable is not set.');
-}
 // Create a mock client for development if Redis URL is not available
 const redisClient = redisUrl ? (0, redis_1.createClient)({
     url: redisUrl,
@@ -30,13 +26,10 @@ if (redisUrl) {
         }
         catch (err) {
             console.error('Failed to connect to Redis:', err);
-            // Only exit in production if Redis connection fails
-            if (process.env.NODE_ENV === 'production') {
-                process.exit(1);
-            }
+            // Don't exit the process, just continue with degraded functionality
         }
     })();
 }
 else {
-    console.warn('Redis not configured - using mock client for development');
+    console.log('Redis not configured - using mock client');
 }
