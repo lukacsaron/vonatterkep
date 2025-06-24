@@ -11,35 +11,31 @@ function searchTrainsInCache(trains: Train[], query: string): TrainSearchResult[
   
   return trains
     .filter(train => {
-      // Search in train number, name, origin, destination
+      // Search in train number, name, destination
       const searchText = [
         train.number,
         train.trainName || '',
-        train.origin?.name || '',
-        train.destination?.name || '',
-        train.routeName || ''
+        train.destination?.name || ''
       ].join(' ').toLowerCase();
       
       return searchText.includes(normalizedQuery);
     })
     .map(train => ({
+      gtfsId: train.gtfsId || train.id,
       trainNumber: train.number,
-      trainName: train.trainName || null,
+      trainName: train.trainName || undefined,
+      trainType: train.type,
       origin: {
-        name: train.origin?.name || 'Unknown',
-        time: new Date(), // Using current time as fallback
-        stationId: train.origin?.id || ''
+        name: 'Unknown', // Origin not available in current Train interface
+        time: new Date() // Using current time as fallback
       },
       destination: {
         name: train.destination?.name || 'Unknown', 
-        time: new Date(), // Using current time as fallback
-        stationId: train.destination?.id || ''
+        time: new Date() // Using current time as fallback
       },
-      delay: train.delay,
-      isActive: true, // All cached trains are active by definition
+      durationMinutes: 120, // Default duration, could be calculated from route
       liveDelayMinutes: train.delay,
-      routeId: train.gtfsId,
-      trainType: train.trainType || 'Unknown'
+      isActive: true // All cached trains are active by definition
     }))
     .slice(0, 20); // Limit results
 }
@@ -54,23 +50,21 @@ function getFeaturedTrainsFromCache(trains: Train[]): TrainSearchResult[] {
       return featuredKeywords.some(keyword => trainText.includes(keyword));
     })
     .map(train => ({
+      gtfsId: train.gtfsId || train.id,
       trainNumber: train.number,
-      trainName: train.trainName || null,
+      trainName: train.trainName || undefined,
+      trainType: train.type,
       origin: {
-        name: train.origin?.name || 'Unknown',
-        time: new Date(),
-        stationId: train.origin?.id || ''
+        name: 'Unknown', // Origin not available in current Train interface
+        time: new Date()
       },
       destination: {
         name: train.destination?.name || 'Unknown',
-        time: new Date(), 
-        stationId: train.destination?.id || ''
+        time: new Date()
       },
-      delay: train.delay,
-      isActive: true,
+      durationMinutes: 120, // Default duration, could be calculated from route
       liveDelayMinutes: train.delay,
-      routeId: train.gtfsId,
-      trainType: train.trainType || 'Unknown'
+      isActive: true
     }))
     .slice(0, 10); // Max 10 featured trains
 }
@@ -119,8 +113,8 @@ export async function GET(request: NextRequest) {
     // Sort results by delay (on-time first) and then by train number
     results.sort((a, b) => {
       // Prioritize on-time trains
-      if (a.delay !== b.delay) {
-        return a.delay - b.delay;
+      if ((a.liveDelayMinutes || 0) !== (b.liveDelayMinutes || 0)) {
+        return (a.liveDelayMinutes || 0) - (b.liveDelayMinutes || 0);
       }
       // Then sort by train number
       return a.trainNumber.localeCompare(b.trainNumber);
@@ -128,8 +122,8 @@ export async function GET(request: NextRequest) {
     
     console.log(`📊 Search results summary:`);
     console.log(`  - Total results: ${results.length}`);
-    console.log(`  - On-time trains: ${results.filter(t => t.delay < 5).length}`);
-    console.log(`  - Delayed trains: ${results.filter(t => t.delay >= 5).length}`);
+    console.log(`  - On-time trains: ${results.filter(t => (t.liveDelayMinutes || 0) < 5).length}`);
+    console.log(`  - Delayed trains: ${results.filter(t => (t.liveDelayMinutes || 0) >= 5).length}`);
     
     return NextResponse.json(results, {
       headers: {

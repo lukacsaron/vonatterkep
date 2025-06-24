@@ -310,7 +310,7 @@ function TrainMapComponent() {
         if (e.features && e.features[0]) {
           const feature = e.features[0];
           const trainId = feature.properties?.id;
-          const train = trains.find(t => t.id === trainId);
+          const train = trains?.find(t => t.id === trainId);
           if (train) {
             setSelectedTrain(train);
           }
@@ -350,9 +350,9 @@ function TrainMapComponent() {
         delay: f.properties.delay, 
         color: f.properties.color,
         heading: f.properties.heading, // Add heading to debug output
-        gtfsId: trains.find(t => t.number === f.properties.number)?.gtfsId,
-        speed: trains.find(t => t.number === f.properties.number)?.speed,
-        isMoving: trains.find(t => t.number === f.properties.number)?.isMoving
+        gtfsId: trains?.find(t => t.number === f.properties.number)?.gtfsId,
+        speed: trains?.find(t => t.number === f.properties.number)?.speed,
+        isMoving: trains?.find(t => t.number === f.properties.number)?.isMoving
       }));
       console.log('  Sample train details:', colors);
       
@@ -360,12 +360,12 @@ function TrainMapComponent() {
       const headings = features.map(f => ({ 
         train: f.properties.number,
         heading: f.properties.heading,
-        gtfsId: trains.find(t => t.number === f.properties.number)?.gtfsId
+        gtfsId: trains?.find(t => t.number === f.properties.number)?.gtfsId
       }));
       console.log('  🧭 Train headings:', headings.slice(0, 10));
       
       // Debug specific problematic train
-      const problematicTrain = trains.find(t => t.gtfsId === '1:24892393.22206360');
+      const problematicTrain = trains?.find(t => t.gtfsId === '1:24892393.22206360');
       if (problematicTrain) {
         console.log('🚨 Problematic train found:', {
           number: problematicTrain.number,
