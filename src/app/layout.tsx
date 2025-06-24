@@ -20,6 +20,13 @@ export const metadata: Metadata = {
   authors: [{ name: "VasútTérkép" }],
   robots: "index, follow",
   
+  // Favicon
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon-16x16.png',
+    apple: '/apple-touch-icon.png',
+  },
+  
   // OpenGraph metadata
   openGraph: {
     title: "VasútTérkép - Élő vasútkövetés Magyarországon",
