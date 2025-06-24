@@ -54,7 +54,7 @@ export default function KiVagyokPage() {
                 <h2 className="text-2xl font-semibold text-gray-900">Mit csinálok amúgy</h2>
               </div>
               <p className="text-gray-700 leading-relaxed mb-6">
-                Napközben a LogiNet International-nél és a 22.design-nál segítek cégeknek abban, hogy hatékonyabban használják ki az AI és a digitalizáció lehetőségeit és ezáltal árbevételt növeljenek. UX-et fordítok ROI-ra (sic!), marketing kampányokat vezetek, 
+                Napközben a LogiNet International-nél és a <a href="https://22.design" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">22.design</a>-nál segítek cégeknek abban, hogy hatékonyabban használják ki az AI és a digitalizáció lehetőségeit és ezáltal árbevételt növeljenek. UX-et fordítok ROI-ra (sic!), marketing kampányokat vezetek, 
                 és időnként még frontend kódot is írok.
               </p>
               <p className="text-gray-700 leading-relaxed">
