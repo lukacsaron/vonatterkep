@@ -11,6 +11,21 @@ const redisClient = redisUrl ? (0, redis_1.createClient)({
     connect: async () => Promise.resolve(),
     get: async () => Promise.resolve(null),
     set: async () => Promise.resolve('OK'),
+    hGet: async () => Promise.resolve(null),
+    hSet: async () => Promise.resolve(1),
+    hGetAll: async () => Promise.resolve({}),
+    hKeys: async () => Promise.resolve([]),
+    hDel: async () => Promise.resolve(0),
+    multi: () => ({
+        hSet: () => { },
+        hDel: () => { },
+        exec: async () => Promise.resolve([])
+    }),
+    publish: async () => Promise.resolve(0),
+    duplicate: () => ({
+        connect: async () => Promise.resolve(),
+        subscribe: async () => Promise.resolve()
+    }),
     on: () => { },
     isReady: false,
 };

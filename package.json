@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "node server.js",
     "build": "next build && tsc --project tsconfig.worker.json",
     "start": "npm run start:web",
-    "start:web": "next start",
+    "start:web": "NODE_ENV=production node server.js",
     "start:worker": "node dist/worker/index.js",
     "dev:worker": "tsx worker/index.ts",
     "lint": "next lint",
@@ -28,7 +28,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "redis": "^4.6.15",
-    "socket.io-client": "^4.8.1",
+    "socket.io": "^4.7.5",
+    "socket.io-client": "^4.7.5",
     "tailwind-merge": "^3.3.1",
     "zustand": "^5.0.5"
   },

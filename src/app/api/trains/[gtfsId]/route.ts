@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { mavApi } from '@/lib/api/mav';
 import { transformMavTrain } from '@/lib/api/transformers';
+import { redisClient } from '@/lib/redis';
+import { Train } from '@/types';
+
+const HASH_KEY = 'trains:live';
 
 interface RouteParams {
   params: Promise<{
@@ -21,14 +25,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     console.log(`🔍 Fetching train for gtfsId: ${gtfsId}`);
     
-    // First try to find the train in live train data
+    // First check Redis HASH for cached train data
     try {
-      const liveTrains = await mavApi.getTrainPositions();
-      const liveTrain = liveTrains.find(t => t.gtfsId === gtfsId);
+      const cachedTrainStr = await redisClient.hGet(HASH_KEY, gtfsId);
       
-      if (liveTrain) {
-        console.log(`✅ Found live train for ${gtfsId}`);
-        const train = transformMavTrain(liveTrain);
+      if (cachedTrainStr) {
+        console.log(`✅ Found train in Redis HASH for ${gtfsId}`);
+        const train: Train = JSON.parse(cachedTrainStr);
         
         // Try to fetch enhanced details including route/timetable
         try {
@@ -66,21 +69,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return NextResponse.json(train, {
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'X-Cache-Status': 'HIT',
+            'X-Cache-Type': 'HASH',
             'Pragma': 'no-cache',
             'Expires': '0'
           }
         });
       }
-    } catch (error) {
-      console.warn(`Failed to find live train for ${gtfsId}, trying train details:`, error);
+    } catch (redisError) {
+      console.warn(`Failed to check Redis HASH for ${gtfsId}:`, redisError);
     }
     
-    // If not found in live data, return 404 for now
-    // Later we could implement a fallback to construct train object from gtfsId
-    console.warn(`Train not found for gtfsId: ${gtfsId}`);
+    // Train not found in cache - return 404 without calling external APIs
+    console.warn(`Train not found in cache for gtfsId: ${gtfsId}`);
     return NextResponse.json(
-      { error: 'Train not found', details: `Train with gtfsId "${gtfsId}" is not currently active` },
-      { status: 404 }
+      { 
+        error: 'Train not found', 
+        details: `Train with gtfsId "${gtfsId}" is not currently active or cached. Only live trains are available.` 
+      },
+      { 
+        status: 404,
+        headers: {
+          'X-Cache-Source': 'REDIS_HASH_ONLY'
+        }
+      }
     );
     
   } catch (error) {

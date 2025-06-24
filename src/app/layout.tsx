@@ -13,16 +13,16 @@ export const viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://vonatterkep.app.jazzrabbit.eu"),
-  title: "Vonat Térkép - Magyar vasúti követő",
-  description: "Valós idejű vonatkövetés és útvonaltervezés a magyar vasúton. Kövesd nyomon a MÁV vonatokat élő térképen, nézd meg a késéseket és tervezd meg az utazásod.",
+  title: "Vonat Térkép - Élő vasútkövetés Magyarországon",
+  description: "Kövesd nyomon a magyar vonatokat élőben. Nézd meg a késéseket és tervezd meg az utazásod.",
   keywords: ["MÁV", "vonat", "vasút", "Magyarország", "követés", "útvonaltervező", "holavonat", "vonat térkép", "elvira", "emma", "vonatinfó", "menetrend"],
   authors: [{ name: "Vonat Térkép" }],
   robots: "index, follow",
   
   // OpenGraph metadata
   openGraph: {
-    title: "Vonat Térkép - Magyar vasúti követő",
-    description: "Valós idejű vonatkövetés és útvonaltervezés a magyar vasúton. Kövesd nyomon a MÁV vonatokat élő térképen.",
+    title: "Vonat Térkép - Élő vasútkövetés Magyarországon",
+    description: "Kövesd nyomon a magyar vonatokat élőben.",
     type: "website",
     locale: "hu_HU",
     url: "https://vonatterkep.app.jazzrabbit.eu",
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
         url: "/og.png",
         width: 1200,
         height: 630,
-        alt: "Vonat Térkép - Magyar vasúti követő",
+        alt: "Vonat Térkép - Élő vasútkövetés Magyarországon",
         type: "image/png",
       },
     ],
@@ -41,8 +41,8 @@ export const metadata: Metadata = {
   // Twitter metadata
   twitter: {
     card: "summary_large_image",
-    title: "Vonat Térkép - Magyar vasúti követő",
-    description: "Valós idejű vonatkövetés és útvonaltervezés a magyar vasúton. Kövesd nyomon a MÁV vonatokat élő térképen.",
+    title: "Vonat Térkép - Élő vasútkövetés Magyarországon",
+    description: "Kövesd nyomon a magyar vonatokat élőben. Nézd meg a késéseket és tervezd meg az utazásod.",
     images: ["/og.png"],
     creator: "@vonatterkep",
     site: "@vonatterkep",

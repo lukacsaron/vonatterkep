@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useMapStore } from '@/lib/store';
@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiYXJvbmx1a2FjcyIsImEiOiJjbWM4eTZyOXAweW5uMmtzM3hmanhtNzlxIn0.iZgLUL05MUWcOI_03e1EFA';
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-export function TrainMap() {
+function TrainMapComponent() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
@@ -156,35 +156,11 @@ export function TrainMap() {
   const trainColorsCache = useRef<Map<string, { delay: number, color: string, category: DelayCategory }>>(new Map());
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Update train positions using GeoJSON layer instead of individual markers
-  useEffect(() => {
-    if (!map.current || !trains || !mapReady) return;
-
-    // Debounce rapid updates during zoom/pan operations
-    if (updateTimeoutRef.current) {
-      clearTimeout(updateTimeoutRef.current);
-    }
-
-    updateTimeoutRef.current = setTimeout(() => {
-
-    // Create stable train signature for change detection
-    const currentTrainIds = trains.map(t => {
-      // Round delay to nearest minute to prevent micro-changes causing flickering
-      const stableDelay = Math.round(t.delay);
-      // Round coordinates to 4 decimal places for stability
-      const stableLat = Math.round(t.position.latitude * 10000) / 10000;
-      const stableLng = Math.round(t.position.longitude * 10000) / 10000;
-      return `${t.id}-${stableDelay}-${stableLat}-${stableLng}`;
-    }).sort().join(',');
+  // Memoize expensive GeoJSON features creation
+  const geoJsonFeatures = useMemo(() => {
+    if (!trains) return [];
     
-    const lastUpdateRef = (map.current as any)?._vonatterkeepLastUpdate;
-    if (lastUpdateRef === currentTrainIds) {
-      return; // No meaningful changes, skip update
-    }
-    (map.current as any)._vonatterkeepLastUpdate = currentTrainIds;
-
-    // Create GeoJSON feature collection from trains
-    const features = trains
+    return trains
       .filter(train => {
         const coords = [train.position.longitude, train.position.latitude];
         // Validate coordinates are reasonable for Hungary
@@ -214,8 +190,8 @@ export function TrainMap() {
             destination: train.destination?.name || 'Unknown',
             color: cachedColor.color,
             heading: train.heading || 0,
-            headingRaw: train.heading || 0, // Store original for debugging
-            delayCategory: cachedColor.category // Store for consistent coloring
+            headingRaw: train.heading || 0,
+            delayCategory: cachedColor.category
           },
           geometry: {
             type: 'Point' as const,
@@ -223,6 +199,20 @@ export function TrainMap() {
           }
         };
       });
+  }, [trains]);
+
+  // Update train positions using GeoJSON layer instead of individual markers
+  useEffect(() => {
+    if (!map.current || !geoJsonFeatures.length || !mapReady) return;
+
+    // Debounce rapid updates during zoom/pan operations
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current);
+    }
+
+    updateTimeoutRef.current = setTimeout(() => {
+    // Use the memoized features
+    const features = geoJsonFeatures;
 
     const geojson = {
       type: 'FeatureCollection' as const,
@@ -230,10 +220,12 @@ export function TrainMap() {
     };
 
     // Clean up cache for trains that no longer exist
-    const activeTrainIds = new Set(trains.map(t => t.id));
-    for (const cachedTrainId of trainColorsCache.current.keys()) {
-      if (!activeTrainIds.has(cachedTrainId)) {
-        trainColorsCache.current.delete(cachedTrainId);
+    if (trains) {
+      const activeTrainIds = new Set(trains.map(t => t.id));
+      for (const cachedTrainId of trainColorsCache.current.keys()) {
+        if (!activeTrainIds.has(cachedTrainId)) {
+          trainColorsCache.current.delete(cachedTrainId);
+        }
       }
     }
 
@@ -402,7 +394,7 @@ export function TrainMap() {
         clearTimeout(updateTimeoutRef.current);
       }
     };
-  }, [trains, setSelectedTrain, mapReady]);
+  }, [geoJsonFeatures, trains, setSelectedTrain, mapReady]);
 
   // Toggle railway overlay
   useEffect(() => {
@@ -433,8 +425,8 @@ export function TrainMap() {
     }, 1500);
   }, [focusedTrain, mapReady, setFocusedTrain]);
 
-  // Helper function to create train marker element
-  function createTrainMarker(train: Train, color: string): HTMLElement {
+  // Memoized helper function to create train marker element
+  const createTrainMarker = useCallback((train: Train, color: string): HTMLElement => {
     const el = document.createElement('div');
     el.className = 'train-marker';
     el.style.width = '24px';
@@ -462,7 +454,7 @@ export function TrainMap() {
     el.style.position = 'relative';
     
     return el;
-  }
+  }, []); // No dependencies needed since it only uses pure DOM operations
 
   if (!mapboxgl.accessToken) {
     return (
@@ -555,3 +547,6 @@ export function TrainMap() {
     </div>
   );
 }
+
+// Memoize the component since it has no props and expensive operations
+export const TrainMap = memo(TrainMapComponent);

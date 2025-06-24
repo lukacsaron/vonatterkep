@@ -2,9 +2,25 @@ import { NextResponse } from 'next/server';
 import { redisClient } from '@/lib/redis';
 
 const CACHE_KEY = 'cache:trains:live';
+const HASH_KEY = 'trains:live';
 
 export async function GET() {
   try {
+    // First, try to get data from the optimized HASH storage
+    const trainHash = await redisClient.hGetAll(HASH_KEY) as Record<string, string>;
+    
+    if (Object.keys(trainHash).length > 0) {
+      // HASH Hit: Parse and return the train data
+      const trains = Object.values(trainHash).map(trainStr => JSON.parse(trainStr));
+      return NextResponse.json(trains, {
+        headers: {
+          'X-Cache-Status': 'HIT',
+          'X-Cache-Type': 'HASH'
+        }
+      });
+    }
+    
+    // Fallback to legacy cache key for backward compatibility
     const cachedData = await redisClient.get(CACHE_KEY);
 
     if (cachedData) {
@@ -12,7 +28,8 @@ export async function GET() {
       const trains = JSON.parse(cachedData);
       return NextResponse.json(trains, {
         headers: {
-          'X-Cache-Status': 'HIT'
+          'X-Cache-Status': 'HIT',
+          'X-Cache-Type': 'STRING'
         }
       });
     } else {

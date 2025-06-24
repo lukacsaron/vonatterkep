@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test - Vonat Térkép</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #0f0;
+        }
+        .log {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #0f0;
+        }
+        .error {
+            color: #f00;
+            border-color: #f00;
+        }
+        .data {
+            color: #0ff;
+            border-color: #0ff;
+        }
+        button {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Test - Vonat Térkép</h1>
+    <button onclick="clearLogs()">Clear Logs</button>
+    <div id="logs"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const logsDiv = document.getElementById('logs');
+        
+        function log(message, type = '') {
+            const div = document.createElement('div');
+            div.className = 'log ' + type;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(div);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+        
+        function clearLogs() {
+            logsDiv.innerHTML = '';
+        }
+        
+        log('Connecting to WebSocket server...');
+        
+        const socket = io({
+            path: '/api/socket'
+        });
+        
+        socket.on('connect', () => {
+            log('✅ Connected! Socket ID: ' + socket.id);
+        });
+        
+        socket.on('disconnect', () => {
+            log('❌ Disconnected from server', 'error');
+        });
+        
+        socket.on('trains-update', (trains) => {
+            log(`📡 Received real-time update: ${trains.length} trains`, 'data');
+            if (trains.length > 0) {
+                log(`Sample train: ${trains[0].trainNumber} - ${trains[0].origin} → ${trains[0].destination}`, 'data');
+            }
+        });
+        
+        socket.on('initial-data', (trains) => {
+            log(`📂 Received initial data: ${trains.length} trains`, 'data');
+            if (trains.length > 0) {
+                log(`Sample train: ${trains[0].trainNumber} - ${trains[0].origin} → ${trains[0].destination}`, 'data');
+            }
+        });
+        
+        socket.on('error', (error) => {
+            log('Socket error: ' + error, 'error');
+        });
+        
+        // Also test the REST API
+        fetch('/api/trains')
+            .then(res => res.json())
+            .then(trains => {
+                log(`REST API: ${trains.length} trains available`);
+            })
+            .catch(err => {
+                log('REST API error: ' + err.message, 'error');
+            });
+    </script>
+</body>
+</html>

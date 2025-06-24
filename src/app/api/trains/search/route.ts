@@ -1,163 +1,141 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { mavApi } from '@/lib/api/mav';
-import { transformSearchResult } from '@/lib/api/transformers';
-import { TrainSearchResult } from '@/types';
+import { redisClient } from '@/lib/redis';
+import { Train, TrainSearchResult } from '@/types';
 
-// Cache for search results (5-10 minutes as specified in requirements)
-const searchCache = new Map<string, { data: TrainSearchResult[], timestamp: number }>();
-const CACHE_DURATION = 7 * 60 * 1000; // 7 minutes
+// Redis keys
+const HASH_KEY = 'trains:live';
+
+// Helper function to search trains in cached data
+function searchTrainsInCache(trains: Train[], query: string): TrainSearchResult[] {
+  const normalizedQuery = query.toLowerCase().trim();
+  
+  return trains
+    .filter(train => {
+      // Search in train number, name, origin, destination
+      const searchText = [
+        train.number,
+        train.trainName || '',
+        train.origin?.name || '',
+        train.destination?.name || '',
+        train.routeName || ''
+      ].join(' ').toLowerCase();
+      
+      return searchText.includes(normalizedQuery);
+    })
+    .map(train => ({
+      trainNumber: train.number,
+      trainName: train.trainName || null,
+      origin: {
+        name: train.origin?.name || 'Unknown',
+        time: new Date(), // Using current time as fallback
+        stationId: train.origin?.id || ''
+      },
+      destination: {
+        name: train.destination?.name || 'Unknown', 
+        time: new Date(), // Using current time as fallback
+        stationId: train.destination?.id || ''
+      },
+      delay: train.delay,
+      isActive: true, // All cached trains are active by definition
+      liveDelayMinutes: train.delay,
+      routeId: train.gtfsId,
+      trainType: train.trainType || 'Unknown'
+    }))
+    .slice(0, 20); // Limit results
+}
+
+// Helper function to get featured trains from cache
+function getFeaturedTrainsFromCache(trains: Train[]): TrainSearchResult[] {
+  const featuredKeywords = ['IC', 'InterCity', 'Railjet', 'TÓPART', 'BALATON', 'EC', 'Express'];
+  
+  return trains
+    .filter(train => {
+      const trainText = (train.number + ' ' + (train.trainName || '')).toUpperCase();
+      return featuredKeywords.some(keyword => trainText.includes(keyword));
+    })
+    .map(train => ({
+      trainNumber: train.number,
+      trainName: train.trainName || null,
+      origin: {
+        name: train.origin?.name || 'Unknown',
+        time: new Date(),
+        stationId: train.origin?.id || ''
+      },
+      destination: {
+        name: train.destination?.name || 'Unknown',
+        time: new Date(), 
+        stationId: train.destination?.id || ''
+      },
+      delay: train.delay,
+      isActive: true,
+      liveDelayMinutes: train.delay,
+      routeId: train.gtfsId,
+      trainType: train.trainType || 'Unknown'
+    }))
+    .slice(0, 10); // Max 10 featured trains
+}
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const q = searchParams.get('q');
-    const fromStationId = searchParams.get('fromStationId');
-    const toStationId = searchParams.get('toStationId');
-    const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
     const featured = searchParams.get('featured') === 'true';
+    
+    console.log(`🔍 Searching trains with params:`, { q, featured });
+    
+    // Get all current trains from Redis cache
+    const trainHash = await redisClient.hGetAll(HASH_KEY) as Record<string, string>;
+    
+    if (Object.keys(trainHash).length === 0) {
+      console.warn('⚠️ No trains found in cache, returning empty results');
+      return NextResponse.json([]);
+    }
+    
+    // Parse all cached trains
+    const trains: Train[] = Object.values(trainHash).map(trainStr => JSON.parse(trainStr));
+    
+    console.log(`📊 Found ${trains.length} trains in cache`);
+    
+    let results: TrainSearchResult[];
     
     // Handle featured trains request
     if (featured) {
-      console.log('🌟 Fetching featured trains...');
-      try {
-        // Get some major InterCity and fast trains as featured content
-        const featuredQueries = ['IC', 'InterCity', 'Railjet', 'TÓPART', 'BALATON'];
-        const allFeaturedResults: TrainSearchResult[] = [];
-        
-        for (const query of featuredQueries) {
-          try {
-            const results = await mavApi.searchTrains({ q: query, date });
-            const transformedResults = results.map(result => transformSearchResult(result, new Map()));
-            allFeaturedResults.push(...transformedResults.slice(0, 3)); // Max 3 per category
-          } catch (error) {
-            console.warn(`Failed to fetch featured trains for "${query}":`, error);
-          }
-        }
-        
-        // Remove duplicates and sort by departure time
-        const uniqueResults = allFeaturedResults.filter((result, index, arr) => 
-          arr.findIndex(r => r.trainNumber === result.trainNumber) === index
+      console.log('🌟 Getting featured trains from cache...');
+      results = getFeaturedTrainsFromCache(trains);
+      console.log(`✅ Found ${results.length} featured trains`);
+    } else {
+      // Handle search query
+      if (!q) {
+        return NextResponse.json(
+          { error: 'Search query "q" parameter is required' },
+          { status: 400 }
         );
-        
-        uniqueResults.sort((a, b) => a.origin.time.getTime() - b.origin.time.getTime());
-        
-        console.log(`✅ Found ${uniqueResults.length} featured trains`);
-        return NextResponse.json(uniqueResults.slice(0, 10)); // Max 10 featured trains
-      } catch (error) {
-        console.warn('Failed to fetch featured trains, returning empty array:', error);
-        return NextResponse.json([]);
       }
-    }
-    
-    // Validate that at least one search parameter is provided
-    if (!q && !fromStationId) {
-      return NextResponse.json(
-        { error: 'At least one of "q" or "fromStationId" parameters is required' },
-        { status: 400 }
-      );
-    }
-    
-    // Validate date format
-    let searchDate: Date;
-    try {
-      searchDate = new Date(date);
-      if (isNaN(searchDate.getTime())) {
-        throw new Error('Invalid date');
-      }
-    } catch (error) {
-      return NextResponse.json(
-        { error: 'Invalid date format. Use YYYY-MM-DD format' },
-        { status: 400 }
-      );
-    }
-    
-    // Create cache key based on search parameters
-    const cacheKey = `${q || ''}-${fromStationId || ''}-${toStationId || ''}-${date}`;
-    
-    // Check cache
-    const now = Date.now();
-    const cached = searchCache.get(cacheKey);
-    if (cached && (now - cached.timestamp < CACHE_DURATION)) {
-      console.log(`🔍 Using cached search results for: ${cacheKey}`);
-      return NextResponse.json(cached.data, {
-        headers: {
-          'Cache-Control': 'public, max-age=420', // 7 minutes
-        }
-      });
-    }
-    
-    console.log(`🔍 Searching trains with params:`, { q, fromStationId, toStationId, date });
-    
-    // Try to get stations for name mapping, but continue without them if it fails
-    let stationMap = new Map<string, { id: string; name: string; coordinates: { latitude: number; longitude: number } }>();
-    try {
-      const stations = await mavApi.getStations();
-      stationMap = new Map(
-        stations.map(station => [station.UicKod, {
-          id: station.UicKod,
-          name: station.Nev,
-          coordinates: {
-            latitude: station.GPS?.Lat || 0,
-            longitude: station.GPS?.Lng || 0
-          }
-        }])
-      );
-      console.log(`📍 Loaded ${stations.length} stations for mapping`);
-    } catch (stationError) {
-      console.warn('⚠️ Station API unavailable, continuing with basic search:', stationError);
-      // Continue without station mapping - search will use fallback methods
-    }
-    
-    // Perform the search using the enhanced MÁV API client
-    const searchResults = await mavApi.searchTrains({
-      q: q || undefined,
-      fromStationId: fromStationId || undefined,
-      toStationId: toStationId || undefined,
-      date
-    });
-    
-    // Transform search results to our TrainSearchResult format
-    const transformedResults: TrainSearchResult[] = searchResults.map(result => 
-      transformSearchResult(result, stationMap)
-    );
-    
-    // Sort results by departure time and relevance
-    transformedResults.sort((a, b) => {
-      // Prioritize active trains (with live delay info)
-      if (a.isActive && !b.isActive) return -1;
-      if (!a.isActive && b.isActive) return 1;
       
-      // Then sort by departure time
-      return a.origin.time.getTime() - b.origin.time.getTime();
-    });
-    
-    // Cache the results
-    searchCache.set(cacheKey, {
-      data: transformedResults,
-      timestamp: now
-    });
-    
-    // Clean up old cache entries
-    for (const [key, value] of searchCache.entries()) {
-      if (now - value.timestamp > CACHE_DURATION * 2) {
-        searchCache.delete(key);
-      }
+      results = searchTrainsInCache(trains, q);
+      console.log(`✅ Found ${results.length} trains matching "${q}"`);
     }
     
-    console.log(`✅ Found ${transformedResults.length} trains matching search criteria`);
-    
-    // Log some statistics for debugging
-    const activeTrains = transformedResults.filter(t => t.isActive);
-    const delayedTrains = transformedResults.filter(t => t.liveDelayMinutes && t.liveDelayMinutes > 5);
+    // Sort results by delay (on-time first) and then by train number
+    results.sort((a, b) => {
+      // Prioritize on-time trains
+      if (a.delay !== b.delay) {
+        return a.delay - b.delay;
+      }
+      // Then sort by train number
+      return a.trainNumber.localeCompare(b.trainNumber);
+    });
     
     console.log(`📊 Search results summary:`);
-    console.log(`  - Total results: ${transformedResults.length}`);
-    console.log(`  - Active trains: ${activeTrains.length}`);
-    console.log(`  - Delayed trains: ${delayedTrains.length}`);
+    console.log(`  - Total results: ${results.length}`);
+    console.log(`  - On-time trains: ${results.filter(t => t.delay < 5).length}`);
+    console.log(`  - Delayed trains: ${results.filter(t => t.delay >= 5).length}`);
     
-    return NextResponse.json(transformedResults, {
+    return NextResponse.json(results, {
       headers: {
-        'Cache-Control': 'public, max-age=420', // 7 minutes
+        'Cache-Control': 'public, max-age=60', // 1 minute cache (data is real-time)
+        'X-Cache-Source': 'REDIS_HASH',
+        'X-Train-Count': trains.length.toString()
       }
     });
     
