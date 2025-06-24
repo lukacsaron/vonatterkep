@@ -571,43 +571,47 @@ function TrainMapComponent() {
         </div>
       )}
 
-      {/* Location Button */}
-      <div className="absolute top-20 right-4 z-10">
-        <LocationButton />
-      </div>
 
       {/* Delay Legend */}
       <div className="absolute bottom-4 left-4 z-10">
         <DelayLegend />
       </div>
 
-      {/* --- ADDED: UI Controls Wrapper --- */}
-      <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
-        {/* Railway Overlay Toggle */}
-        <button
-          onClick={() => setShowRailwayOverlay(!showRailwayOverlay)}
-          className={cn(
-            'px-3 py-2 rounded-lg shadow-md text-sm font-medium transition-colors',
-            showRailwayOverlay 
-              ? 'bg-blue-600 text-white hover:bg-blue-700' 
-              : 'bg-white text-gray-700 hover:bg-gray-50'
-          )}
-        >
-          🚂 Vasúti pályák
-        </button>
+      {/* --- UPDATED: UI Controls Wrapper - Now Vertical --- */}
+      <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
+        {/* Top row: Railway and Refresh buttons */}
+        <div className="flex items-center gap-2">
+          {/* Railway Overlay Toggle */}
+          <button
+            onClick={() => setShowRailwayOverlay(!showRailwayOverlay)}
+            className={cn(
+              'px-3 py-2 rounded-lg shadow-md text-sm font-medium transition-colors',
+              showRailwayOverlay 
+                ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            )}
+          >
+            🚂 Vasúti pályák
+          </button>
 
-        {/* --- ADDED: Manual Refresh Button --- */}
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="flex items-center gap-2 px-3 py-2 bg-white text-gray-700 rounded-lg shadow-md hover:bg-gray-50 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
-          title="Vonatadatok frissítése"
-        >
-          <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
-          <span className="text-sm font-medium">
-            {isFetching ? 'Frissítés...' : 'Frissítés'}
-          </span>
-        </button>
+          {/* --- ADDED: Manual Refresh Button --- */}
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex items-center gap-2 px-3 py-2 bg-white text-gray-700 rounded-lg shadow-md hover:bg-gray-50 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+            title="Vonatadatok frissítése"
+          >
+            <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
+            <span className="text-sm font-medium">
+              {isFetching ? 'Frissítés...' : 'Frissítés'}
+            </span>
+          </button>
+        </div>
+
+        {/* Bottom row: Location Button */}
+        <div className="flex justify-start">
+          <LocationButton />
+        </div>
       </div>
       
       {/* --- UPDATED: Use `isLoading` for the initial load message --- */}
