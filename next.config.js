@@ -19,7 +19,8 @@ const nextConfig = {
       '@radix-ui/react-select',
       '@radix-ui/react-tabs',
     ],
-    optimizeCss: true,
+    // Disable CSS optimization due to critters module dependency issue in Next.js 15
+    // optimizeCss: true,
   },
   
   // SWC optimizations (minification is enabled by default in Next.js 15)
