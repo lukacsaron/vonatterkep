@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Train, Station, Journey, User, Favorite } from '@/types';
+import { Train, Station, Journey, User, Favorite, Coordinates } from '@/types';
 
 interface MapState {
   selectedTrain: Train | null;
@@ -115,4 +115,66 @@ export const useJourneyStore = create<JourneyState>((set) => ({
       origin: state.destination,
       destination: state.origin,
     })),
+}));
+
+export type LocationPermissionState = 'prompt' | 'granted' | 'denied' | 'unavailable';
+
+interface LocationState {
+  userLocation: Coordinates | null;
+  permissionState: LocationPermissionState;
+  isLocating: boolean;
+  isCentered: boolean;
+  requestLocation: () => void;
+  setUserLocation: (location: Coordinates | null) => void;
+  setPermissionState: (state: LocationPermissionState) => void;
+  setIsLocating: (isLocating: boolean) => void;
+  setIsCentered: (isCentered: boolean) => void;
+}
+
+export const useLocationStore = create<LocationState>((set, get) => ({
+  userLocation: null,
+  permissionState: 'prompt',
+  isLocating: false,
+  isCentered: false,
+  setUserLocation: (location) => set({ userLocation: location }),
+  setPermissionState: (state) => set({ permissionState: state }),
+  setIsLocating: (isLocating) => set({ isLocating: isLocating }),
+  setIsCentered: (isCentered) => set({ isCentered: isCentered }),
+  requestLocation: () => {
+    if (!navigator.geolocation) {
+      set({ permissionState: 'unavailable' });
+      return;
+    }
+
+    set({ isLocating: true, isCentered: false });
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const newLocation = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+        set({
+          userLocation: newLocation,
+          permissionState: 'granted',
+          isLocating: false,
+          isCentered: true,
+        });
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        set({
+          userLocation: null,
+          permissionState: 'denied',
+          isLocating: false,
+          isCentered: false,
+        });
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  },
 }));

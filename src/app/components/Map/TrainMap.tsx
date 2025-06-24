@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { useMapStore } from '@/lib/store';
+import { useMapStore, useLocationStore } from '@/lib/store';
 import { useTrains } from '@/lib/hooks/useTrains';
 import { TrainInfoCard } from '../Train/TrainInfoCard';
 import { LoadingSpinner } from '../UI/LoadingSpinner';
 import { DelayLegend } from '../UI/DelayLegend';
+import { LocationButton } from '../UI/LocationButton';
 import { Train, DelayCategory } from '@/types';
 import { getDelayCategory, getDelayColor } from '@/lib/utils';
 // --- ADDED: Import RefreshCw icon and cn utility ---
@@ -29,6 +30,10 @@ function TrainMapComponent() {
   const { selectedTrain, focusedTrain, setSelectedTrain, setFocusedTrain, setBounds } = useMapStore();
   // --- CHANGED: Destructure `isFetching` and `refetch` from the useTrains hook ---
   const { data: trains, isLoading, isFetching, error, refetch } = useTrains();
+  
+  // Location store hooks
+  const { userLocation, isCentered, setIsCentered } = useLocationStore();
+  const [isInitialLocationSet, setIsInitialLocationSet] = useState(false);
 
   console.log('TrainMap render:', { 
     hasToken: !!MAPBOX_TOKEN, 
@@ -406,6 +411,79 @@ function TrainMapComponent() {
     }
   }, [showRailwayOverlay, mapReady]);
 
+  // Handle user location and marker
+  useEffect(() => {
+    if (!map.current || !mapReady) return;
+
+    const mapInstance = map.current;
+
+    // Add or update the user location marker
+    const source = mapInstance.getSource('user-location-source') as mapboxgl.GeoJSONSource;
+    const geojson = {
+      type: 'FeatureCollection' as const,
+      features: userLocation ? [{
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [userLocation.longitude, userLocation.latitude],
+        },
+        properties: {},
+      }] : [],
+    };
+
+    if (source) {
+      source.setData(geojson);
+    } else {
+      mapInstance.addSource('user-location-source', { type: 'geojson', data: geojson });
+
+      // Add the pulsing ring layer
+      mapInstance.addLayer({
+        id: 'user-location-pulse-layer',
+        type: 'circle',
+        source: 'user-location-source',
+        paint: {
+          'circle-radius': 10,
+          'circle-color': '#007cff',
+          'circle-opacity': 0.5,
+        },
+      });
+
+      // Add the solid dot layer on top
+      mapInstance.addLayer({
+        id: 'user-location-dot-layer',
+        type: 'circle',
+        source: 'user-location-source',
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#007cff',
+          'circle-stroke-color': 'white',
+          'circle-stroke-width': 2,
+        },
+      });
+    }
+
+    // Handle the initial pan/zoom
+    if (userLocation && !isInitialLocationSet) {
+      mapInstance.easeTo({
+        center: [userLocation.longitude, userLocation.latitude],
+        zoom: 12, // City-level zoom, not too deep
+        duration: 2000,
+      });
+      setIsInitialLocationSet(true);
+      setIsCentered(true);
+    }
+    
+    // Handle manual re-centering via the button
+    if (userLocation && isCentered && isInitialLocationSet) {
+      mapInstance.easeTo({
+        center: [userLocation.longitude, userLocation.latitude],
+        zoom: Math.max(mapInstance.getZoom(), 12), // Don't zoom out if already zoomed in
+        duration: 1500,
+      });
+    }
+
+  }, [userLocation, mapReady, isInitialLocationSet, isCentered, setIsCentered]);
+
   // Handle focused train - zoom to it and clear the focused state
   useEffect(() => {
     if (!map.current || !mapReady || !focusedTrain) return;
@@ -492,6 +570,11 @@ function TrainMapComponent() {
           />
         </div>
       )}
+
+      {/* Location Button */}
+      <div className="absolute top-20 right-4 z-10">
+        <LocationButton />
+      </div>
 
       {/* Delay Legend */}
       <div className="absolute bottom-4 left-4 z-10">
