@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Environment Setup Script for Vonat Térkép
+# Environment Setup Script for VasútTérkép
 # Helps generate secure secrets and configure environment
 
 set -e
 
-echo "🔧 Vonat Térkép Environment Setup"
+echo "🔧 VasútTérkép Environment Setup"
 echo "================================"
 
 # Colors for output
@@ -31,7 +31,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 # Start creating the environment file
-echo "# Vonat Térkép Environment Configuration" > "$ENV_FILE"
+echo "# VasútTérkép Environment Configuration" > "$ENV_FILE"
 echo "# Generated on $(date)" >> "$ENV_FILE"
 echo "" >> "$ENV_FILE"
 

@@ -63,12 +63,12 @@ const hasMapboxToken = !!process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
 ### ✅ Application Startup
 ```
-🚀 Starting Vonat Térkép application...
+🚀 Starting VasútTérkép application...
 🔧 Starting background worker...
 ✅ Worker started (PID: X)
 🌐 Starting web server...
 ✅ Web server started (PID: Y)
-🎉 Vonat Térkép is running!
+🎉 VasútTérkép is running!
 ```
 
 ### ✅ Redis Connection

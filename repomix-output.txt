@@ -217,7 +217,7 @@ File: public/test-websocket.html
 <!DOCTYPE html>
 <html>
 <head>
-    <title>WebSocket Test - Vonat Térkép</title>
+    <title>WebSocket Test - VasútTérkép</title>
     <style>
         body {
             font-family: monospace;
@@ -249,7 +249,7 @@ File: public/test-websocket.html
     </style>
 </head>
 <body>
-    <h1>WebSocket Test - Vonat Térkép</h1>
+    <h1>WebSocket Test - VasútTérkép</h1>
     <button onclick="clearLogs()">Clear Logs</button>
     <div id="logs"></div>
 
@@ -329,12 +329,12 @@ File: scripts/deploy.sh
 ================
 #!/bin/bash
 
-# Vonat Térkép Deployment Script for Coolify
+# VasútTérkép Deployment Script for Coolify
 # This script helps deploy the application to Coolify
 
 set -e
 
-echo "🚀 Vonat Térkép Deployment Script"
+echo "🚀 VasútTérkép Deployment Script"
 echo "================================"
 
 # Colors for output
@@ -423,12 +423,12 @@ File: scripts/setup-env.sh
 ================
 #!/bin/bash
 
-# Environment Setup Script for Vonat Térkép
+# Environment Setup Script for VasútTérkép
 # Helps generate secure secrets and configure environment
 
 set -e
 
-echo "🔧 Vonat Térkép Environment Setup"
+echo "🔧 VasútTérkép Environment Setup"
 echo "================================"
 
 # Colors for output
@@ -454,7 +454,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 # Start creating the environment file
-echo "# Vonat Térkép Environment Configuration" > "$ENV_FILE"
+echo "# VasútTérkép Environment Configuration" > "$ENV_FILE"
 echo "# Generated on $(date)" >> "$ENV_FILE"
 echo "" >> "$ENV_FILE"
 
@@ -575,12 +575,12 @@ File: scripts/verify-deployment.sh
 ================
 #!/bin/bash
 
-# Vonat Térkép Deployment Verification Script
+# VasútTérkép Deployment Verification Script
 # Run this after deployment to verify everything is working
 
 set -e
 
-echo "🔍 Vonat Térkép Deployment Verification"
+echo "🔍 VasútTérkép Deployment Verification"
 echo "======================================"
 
 # Colors for output
@@ -757,7 +757,7 @@ echo "======="
 if [ $failed_tests -eq 0 ]; then
     echo -e "${GREEN}🎉 All critical tests passed!${NC}"
     echo ""
-    echo "Deployment appears to be successful. Your Vonat Térkép instance is ready!"
+    echo "Deployment appears to be successful. Your VasútTérkép instance is ready!"
     echo ""
     echo "You can now:"
     echo "- Access the application at: $DEPLOYMENT_URL"
@@ -781,11 +781,11 @@ fi
 ================
 File: specifications/cacheing.md
 ================
-## Specification: High-Concurrency Architecture for Vonat Térkép
+## Specification: High-Concurrency Architecture for VasútTérkép
 
 ### 1. Vision & Core Principle
 
-**Objective:** To re-architect the Vonat Térkép application to handle 5,000+ concurrent users reliably by decoupling the user-facing API from the external MÁV API.
+**Objective:** To re-architect the VasútTérkép application to handle 5,000+ concurrent users reliably by decoupling the user-facing API from the external MÁV API.
 
 **Core Principle:** *Users request data from our cache; a background worker populates that cache.* This ensures the user experience is fast, scalable, and resilient, regardless of external API performance or user load.
 
@@ -1111,7 +1111,7 @@ File: specifications/search.md
 
 ### 1. Vision & Guiding Principles
 
-Our goal is to evolve Vonat Térkép from a real-time map into a comprehensive railway information hub. These new features will empower users to not only see where trains *are*, but to find the trains they *need* and understand station activity at a glance.
+Our goal is to evolve VasútTérkép from a real-time map into a comprehensive railway information hub. These new features will empower users to not only see where trains *are*, but to find the trains they *need* and understand station activity at a glance.
 
 **Guiding Principles:**
 
@@ -4436,7 +4436,7 @@ export function Navbar() {
           <div className="flex">
             <Link href="/" className="flex items-center">
               <Train className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-xl font-semibold">Vonat Térkép</span>
+              <span className="ml-2 text-xl font-semibold">VasútTérkép</span>
             </Link>
             
             <div className="hidden sm:ml-8 sm:flex sm:space-x-8">
@@ -5203,26 +5203,26 @@ export const viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://vonatterkep.app.jazzrabbit.eu"),
-  title: "Vonat Térkép - Élő vasútkövetés Magyarországon",
+  title: "VasútTérkép - Élő vasútkövetés Magyarországon",
   description: "Kövesd nyomon a magyar vonatokat élőben. Nézd meg a késéseket és tervezd meg az utazásod.",
   keywords: ["MÁV", "vonat", "vasút", "Magyarország", "követés", "útvonaltervező", "holavonat", "vonat térkép", "elvira", "emma", "vonatinfó", "menetrend"],
-  authors: [{ name: "Vonat Térkép" }],
+  authors: [{ name: "VasútTérkép" }],
   robots: "index, follow",
   
   // OpenGraph metadata
   openGraph: {
-    title: "Vonat Térkép - Élő vasútkövetés Magyarországon",
+    title: "VasútTérkép - Élő vasútkövetés Magyarországon",
     description: "Kövesd nyomon a magyar vonatokat élőben.",
     type: "website",
     locale: "hu_HU",
     url: "https://vonatterkep.app.jazzrabbit.eu",
-    siteName: "Vonat Térkép",
+    siteName: "VasútTérkép",
     images: [
       {
         url: "/og.png",
         width: 1200,
         height: 630,
-        alt: "Vonat Térkép - Élő vasútkövetés Magyarországon",
+        alt: "VasútTérkép - Élő vasútkövetés Magyarországon",
         type: "image/png",
       },
     ],
@@ -5231,7 +5231,7 @@ export const metadata: Metadata = {
   // Twitter metadata
   twitter: {
     card: "summary_large_image",
-    title: "Vonat Térkép - Élő vasútkövetés Magyarországon",
+    title: "VasútTérkép - Élő vasútkövetés Magyarországon",
     description: "Kövesd nyomon a magyar vonatokat élőben. Nézd meg a késéseket és tervezd meg az utazásod.",
     images: ["/og.png"],
     creator: "@vonatterkep",
@@ -5255,8 +5255,8 @@ export const metadata: Metadata = {
     // Additional meta tags
     "apple-mobile-web-app-capable": "yes",
     "apple-mobile-web-app-status-bar-style": "default",
-    "apple-mobile-web-app-title": "Vonat Térkép",
-    "application-name": "Vonat Térkép",
+    "apple-mobile-web-app-title": "VasútTérkép",
+    "application-name": "VasútTérkép",
     "mobile-web-app-capable": "yes",
     "msapplication-TileColor": "#2563eb",
     "msapplication-TileImage": "/og.png",
@@ -7391,7 +7391,7 @@ setTimeout(() => {
 ================
 File: .coolify.yml
 ================
-# Coolify Configuration for Vonat Térkép
+# Coolify Configuration for VasútTérkép
 # This file helps Coolify understand how to deploy the application
 
 version: '1.0'
@@ -7546,10 +7546,10 @@ File: .prettierrc
 ================
 File: CLAUDE.md
 ================
-# Vonat Térkép Project Guide
+# VasútTérkép Project Guide
 
 ## Project Overview
-Vonat Térkép is a modern web application for real-time Hungarian railway (MÁV) tracking and journey planning. It provides live train positions, delay information, route planning, and station details.
+VasútTérkép is a modern web application for real-time Hungarian railway (MÁV) tracking and journey planning. It provides live train positions, delay information, route planning, and station details.
 
 ## Tech Stack
 - **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui
@@ -7838,11 +7838,11 @@ The build should now succeed! 🚀
 ================
 File: DEPLOYMENT.md
 ================
-# Vonat Térkép Deployment Guide for Coolify
+# VasútTérkép Deployment Guide for Coolify
 
 ## Prerequisites
 - Coolify instance running
-- Git repository with Vonat Térkép code
+- Git repository with VasútTérkép code
 - Mapbox account and access token
 - Domain name (optional)
 
@@ -8223,12 +8223,12 @@ const hasMapboxToken = !!process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
 ### ✅ Application Startup
 ```
-🚀 Starting Vonat Térkép application...
+🚀 Starting VasútTérkép application...
 🔧 Starting background worker...
 ✅ Worker started (PID: X)
 🌐 Starting web server...
 ✅ Web server started (PID: Y)
-🎉 Vonat Térkép is running!
+🎉 VasútTérkép is running!
 ```
 
 ### ✅ Redis Connection
@@ -8867,8 +8867,8 @@ File: start.sh
 ================
 #!/bin/sh
 
-# Vonat Térkép Startup Script
-echo "🚀 Starting Vonat Térkép application..."
+# VasútTérkép Startup Script
+echo "🚀 Starting VasútTérkép application..."
 
 # Check if required files exist
 if [ ! -f "server.js" ]; then
@@ -8906,7 +8906,7 @@ node server.js &
 WEB_PID=$!
 echo "✅ Web server started (PID: $WEB_PID)"
 
-echo "🎉 Vonat Térkép is running!"
+echo "🎉 VasútTérkép is running!"
 echo "   Web: http://localhost:${PORT:-3000}"
 echo "   Health: http://localhost:${PORT:-3000}/api/health"
 

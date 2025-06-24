@@ -14,26 +14,26 @@ export const viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://vonatterkep.app.jazzrabbit.eu"),
-  title: "Vonat Térkép - Élő vasútkövetés Magyarországon",
+  title: "VasútTérkép - Élő vasútkövetés Magyarországon",
   description: "Kövesd nyomon a magyar vonatokat élőben. Nézd meg a késéseket és tervezd meg az utazásod.",
   keywords: ["MÁV", "vonat", "vasút", "Magyarország", "követés", "útvonaltervező", "holavonat", "vonat térkép", "elvira", "emma", "vonatinfó", "menetrend"],
-  authors: [{ name: "Vonat Térkép" }],
+  authors: [{ name: "VasútTérkép" }],
   robots: "index, follow",
   
   // OpenGraph metadata
   openGraph: {
-    title: "Vonat Térkép - Élő vasútkövetés Magyarországon",
+    title: "VasútTérkép - Élő vasútkövetés Magyarországon",
     description: "Kövesd nyomon a magyar vonatokat élőben.",
     type: "website",
     locale: "hu_HU",
     url: "https://vonatterkep.app.jazzrabbit.eu",
-    siteName: "Vonat Térkép",
+    siteName: "VasútTérkép",
     images: [
       {
         url: "/og.png",
         width: 1200,
         height: 630,
-        alt: "Vonat Térkép - Élő vasútkövetés Magyarországon",
+        alt: "VasútTérkép - Élő vasútkövetés Magyarországon",
         type: "image/png",
       },
     ],
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   // Twitter metadata
   twitter: {
     card: "summary_large_image",
-    title: "Vonat Térkép - Élő vasútkövetés Magyarországon",
+    title: "VasútTérkép - Élő vasútkövetés Magyarországon",
     description: "Kövesd nyomon a magyar vonatokat élőben. Nézd meg a késéseket és tervezd meg az utazásod.",
     images: ["/og.png"],
     creator: "@vonatterkep",
@@ -66,8 +66,8 @@ export const metadata: Metadata = {
     // Additional meta tags
     "apple-mobile-web-app-capable": "yes",
     "apple-mobile-web-app-status-bar-style": "default",
-    "apple-mobile-web-app-title": "Vonat Térkép",
-    "application-name": "Vonat Térkép",
+    "apple-mobile-web-app-title": "VasútTérkép",
+    "application-name": "VasútTérkép",
     "mobile-web-app-capable": "yes",
     "msapplication-TileColor": "#2563eb",
     "msapplication-TileImage": "/og.png",

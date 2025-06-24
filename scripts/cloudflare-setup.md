@@ -1,6 +1,6 @@
-# Cloudflare Setup for Vonat Térkép
+# Cloudflare Setup for VasútTérkép
 
-This script optimizes Cloudflare configuration for the Vonat Térkép application with caching, security, and performance enhancements.
+This script optimizes Cloudflare configuration for the VasútTérkép application with caching, security, and performance enhancements.
 
 ## Prerequisites
 

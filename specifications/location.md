@@ -1,4 +1,4 @@
-Of course. Based on a complete analysis of your existing codebase, here is a detailed technical specification for adding a user location-aware feature to your Vonat Térkép application.
+Of course. Based on a complete analysis of your existing codebase, here is a detailed technical specification for adding a user location-aware feature to your VasútTérkép application.
 
 This specification is designed to integrate seamlessly with your current architecture, including `Mapbox GL JS`, `Zustand` for state management, and your component structure.
 

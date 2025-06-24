@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Vonat Térkép Deployment Script for Coolify
+# VasútTérkép Deployment Script for Coolify
 # This script helps deploy the application to Coolify
 
 set -e
 
-echo "🚀 Vonat Térkép Deployment Script"
+echo "🚀 VasútTérkép Deployment Script"
 echo "================================"
 
 # Colors for output

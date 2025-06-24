@@ -1,8 +1,8 @@
-# Vonat Térkép Deployment Guide for Coolify
+# VasútTérkép Deployment Guide for Coolify
 
 ## Prerequisites
 - Coolify instance running
-- Git repository with Vonat Térkép code
+- Git repository with VasútTérkép code
 - Mapbox account and access token
 - Domain name (optional)
 

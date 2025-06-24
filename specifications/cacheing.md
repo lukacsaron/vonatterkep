@@ -1,8 +1,8 @@
-## Specification: High-Concurrency Architecture for Vonat Térkép
+## Specification: High-Concurrency Architecture for VasútTérkép
 
 ### 1. Vision & Core Principle
 
-**Objective:** To re-architect the Vonat Térkép application to handle 5,000+ concurrent users reliably by decoupling the user-facing API from the external MÁV API.
+**Objective:** To re-architect the VasútTérkép application to handle 5,000+ concurrent users reliably by decoupling the user-facing API from the external MÁV API.
 
 **Core Principle:** *Users request data from our cache; a background worker populates that cache.* This ensures the user experience is fast, scalable, and resilient, regardless of external API performance or user load.
 

@@ -1,7 +1,7 @@
-# Vonat Térkép Project Guide
+# VasútTérkép Project Guide
 
 ## Project Overview
-Vonat Térkép is a modern web application for real-time Hungarian railway (MÁV) tracking and journey planning. It provides live train positions, delay information, route planning, and station details.
+VasútTérkép is a modern web application for real-time Hungarian railway (MÁV) tracking and journey planning. It provides live train positions, delay information, route planning, and station details.
 
 ## Tech Stack
 - **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui

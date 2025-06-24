@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Cloudflare Optimization Setup for Vonat Térkép
+ * Cloudflare Optimization Setup for VasútTérkép
  * 
  * This script configures Cloudflare for optimal performance:
  * - Caching rules for static assets and API responses
@@ -367,7 +367,7 @@ class CloudflareSetup {
   }
 
   async run() {
-    console.log('🌟 Starting Cloudflare optimization setup for Vonat Térkép...\n');
+    console.log('🌟 Starting Cloudflare optimization setup for VasútTérkép...\n');
 
     try {
       await this.setupCacheRules();
