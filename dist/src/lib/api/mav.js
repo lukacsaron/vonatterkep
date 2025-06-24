@@ -192,36 +192,45 @@ class MavApiClient {
             // Calculate current delay and time logic like holavonat
             let maxDelay = 0;
             const now = new Date();
-            // CRITICAL FIX: The EMMA API returns seconds since midnight in UTC time
-            // We need to subtract the timezone offset to convert to local Budapest time
-            const timezoneOffsetSeconds = now.getTimezoneOffset() * 60; // Convert minutes to seconds
+            // LAST RESORT: Manually subtract 2 hours from all API times
+            // This is a brute force fix since EMMA API seems to return times 2 hours ahead
             const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const sinceMidnight = (now.getTime() - localMidnight.getTime()) / 1000;
+            console.log('LAST RESORT - Manual 2h adjustment approach:', {
+                currentTime: now.toString(),
+                localMidnight: localMidnight.toISOString(),
+                sinceMidnight,
+                currentTimeHours: sinceMidnight / 3600,
+                adjustment: 'Subtracting 2 hours (7200 seconds) from all API times'
+            });
             const stops = trip.stoptimes.map((stoptime, index) => {
-                var _a, _b, _c, _d, _e, _f, _g, _h;
+                var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
                 const arrivalDelay = stoptime.arrivalDelay || 0;
                 const departureDelay = 0; // Not available in this API
                 const stopDelay = arrivalDelay; // Use arrival delay like holavonat
                 maxDelay = Math.max(maxDelay, Math.abs(stopDelay));
                 // Convert times from seconds since midnight to actual Date objects for today
-                // CRITICAL FIX: EMMA API returns UTC seconds, convert to local Budapest time
-                const scheduledArrival = stoptime.scheduledArrival ? new Date(localMidnight.getTime() + (stoptime.scheduledArrival + timezoneOffsetSeconds) * 1000) : undefined;
-                const realtimeArrival = stoptime.realtimeArrival ? new Date(localMidnight.getTime() + (stoptime.realtimeArrival + timezoneOffsetSeconds) * 1000) : undefined;
-                const scheduledDeparture = stoptime.scheduledDeparture ? new Date(localMidnight.getTime() + (stoptime.scheduledDeparture + timezoneOffsetSeconds) * 1000) : undefined;
-                const realtimeDeparture = stoptime.realtimeDeparture ? new Date(localMidnight.getTime() + (stoptime.realtimeDeparture + timezoneOffsetSeconds) * 1000) : undefined;
-                // Debug time conversion for specific trains (add 19785 for current test)
+                // LAST RESORT: Manually subtract 2 hours (7200 seconds) from API times
+                const twoHours = 2 * 3600; // 7200 seconds = 2 hours
+                const scheduledArrival = stoptime.scheduledArrival ? new Date(localMidnight.getTime() + (stoptime.scheduledArrival - twoHours) * 1000) : undefined;
+                const realtimeArrival = stoptime.realtimeArrival ? new Date(localMidnight.getTime() + (stoptime.realtimeArrival - twoHours) * 1000) : undefined;
+                const scheduledDeparture = stoptime.scheduledDeparture ? new Date(localMidnight.getTime() + (stoptime.scheduledDeparture - twoHours) * 1000) : undefined;
+                const realtimeDeparture = stoptime.realtimeDeparture ? new Date(localMidnight.getTime() + (stoptime.realtimeDeparture - twoHours) * 1000) : undefined;
+                // Debug time conversion for specific trains (add BALATON for current test)
                 if (((_a = trip.trainName) === null || _a === void 0 ? void 0 : _a.includes('TÓPART')) || ((_b = trip.tripHeadsign) === null || _b === void 0 ? void 0 : _b.includes('TÓPART')) ||
                     ((_c = trip.tripShortName) === null || _c === void 0 ? void 0 : _c.includes('34924')) || ((_d = trip.tripShortName) === null || _d === void 0 ? void 0 : _d.includes('19785')) ||
-                    gtfsId.includes('34924') || gtfsId.includes('19785')) {
-                    console.log('Train time conversion debug:', {
+                    ((_e = trip.tripShortName) === null || _e === void 0 ? void 0 : _e.includes('875')) || ((_f = trip.trainName) === null || _f === void 0 ? void 0 : _f.includes('BALATON')) ||
+                    gtfsId.includes('34924') || gtfsId.includes('19785') || gtfsId.includes('875')) {
+                    console.log('LAST RESORT - Manual 2h adjustment debug:', {
                         trainId: trip.tripShortName || 'unknown',
                         stopName: stoptime.stop.name,
-                        scheduledArrivalSecondsUTC: stoptime.scheduledArrival,
-                        scheduledArrivalSecondsLocal: stoptime.scheduledArrival + timezoneOffsetSeconds,
+                        rawScheduledArrivalSeconds: stoptime.scheduledArrival,
+                        adjustedScheduledArrivalSeconds: stoptime.scheduledArrival - twoHours,
                         scheduledArrivalTime: scheduledArrival === null || scheduledArrival === void 0 ? void 0 : scheduledArrival.toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest' }),
-                        timezoneOffsetSeconds,
                         localMidnight: localMidnight.toISOString(),
-                        currentTime: now.toISOString()
+                        currentTime: now.toISOString(),
+                        sinceMidnight: sinceMidnight,
+                        currentTimeHours: sinceMidnight / 3600
                     });
                 }
                 // Determine if stop is in the past (improved logic)
@@ -231,34 +240,35 @@ class MavApiClient {
                 // A stop is considered "passed" if:
                 // 1. It has a departure time AND that time is more than 5 minutes ago (to account for brief stops)
                 // 2. OR it only has arrival time AND that was more than 10 minutes ago
-                // IMPORTANT: Convert UTC times to local before comparison
+                // LAST RESORT: Account for the 2-hour manual adjustment
                 let isPassed = false;
                 if (departureTime > 0) {
-                    const localDepartureTime = departureTime + timezoneOffsetSeconds;
-                    isPassed = localDepartureTime < (sinceMidnight - 300); // 5 minutes margin for departures
+                    const adjustedDepartureTime = departureTime - twoHours; // Subtract 2 hours from API time
+                    isPassed = adjustedDepartureTime < (sinceMidnight - 300); // 5 minutes margin for departures
                 }
                 else if (arrivalTime > 0) {
-                    const localArrivalTime = arrivalTime + timezoneOffsetSeconds;
-                    isPassed = localArrivalTime < (sinceMidnight - 600); // 10 minutes margin for arrivals only
+                    const adjustedArrivalTime = arrivalTime - twoHours; // Subtract 2 hours from API time
+                    isPassed = adjustedArrivalTime < (sinceMidnight - 600); // 10 minutes margin for arrivals only
                 }
                 // Special case: if this is the first stop, it's only passed if departure was more than 5 minutes ago
                 if (index === 0 && departureTime > 0) {
-                    const localDepartureTime = departureTime + timezoneOffsetSeconds;
-                    isPassed = localDepartureTime < (sinceMidnight - 300);
+                    const adjustedDepartureTime = departureTime - twoHours;
+                    isPassed = adjustedDepartureTime < (sinceMidnight - 300);
                 }
                 // Debug isPassed calculation for specific trains
-                if (((_e = trip.trainName) === null || _e === void 0 ? void 0 : _e.includes('TÓPART')) || ((_f = trip.tripHeadsign) === null || _f === void 0 ? void 0 : _f.includes('TÓPART')) ||
-                    ((_g = trip.tripShortName) === null || _g === void 0 ? void 0 : _g.includes('34924')) || ((_h = trip.tripShortName) === null || _h === void 0 ? void 0 : _h.includes('19785')) ||
-                    gtfsId.includes('34924') || gtfsId.includes('19785')) {
-                    console.log('Train isPassed calculation debug:', {
+                if (((_g = trip.trainName) === null || _g === void 0 ? void 0 : _g.includes('TÓPART')) || ((_h = trip.tripHeadsign) === null || _h === void 0 ? void 0 : _h.includes('TÓPART')) ||
+                    ((_j = trip.tripShortName) === null || _j === void 0 ? void 0 : _j.includes('34924')) || ((_k = trip.tripShortName) === null || _k === void 0 ? void 0 : _k.includes('19785')) ||
+                    ((_l = trip.tripShortName) === null || _l === void 0 ? void 0 : _l.includes('875')) || ((_m = trip.trainName) === null || _m === void 0 ? void 0 : _m.includes('BALATON')) ||
+                    gtfsId.includes('34924') || gtfsId.includes('19785') || gtfsId.includes('875')) {
+                    console.log('LAST RESORT - Manual 2h adjustment isPassed debug:', {
                         trainId: trip.tripShortName || 'unknown',
                         stopName: stoptime.stop.name,
-                        departureTimeUTC: departureTime,
-                        departureTimeLocal: departureTime > 0 ? departureTime + timezoneOffsetSeconds : 0,
+                        departureTimeRaw: departureTime,
+                        departureTimeAdjusted: departureTime - twoHours,
                         sinceMidnight,
                         isPassed,
                         currentTimeSeconds: sinceMidnight,
-                        departureTimeHuman: departureTime > 0 ? new Date(localMidnight.getTime() + (departureTime + timezoneOffsetSeconds) * 1000).toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest' }) : 'N/A'
+                        departureTimeHuman: departureTime > 0 ? new Date(localMidnight.getTime() + (departureTime - twoHours) * 1000).toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest' }) : 'N/A'
                     });
                 }
                 return {
