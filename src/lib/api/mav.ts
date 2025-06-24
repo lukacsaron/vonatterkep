@@ -266,10 +266,13 @@ class MavApiClient {
       // Calculate current delay and time logic like holavonat
       let maxDelay = 0;
       const now = new Date();
-      // Calculate seconds since midnight in local timezone (consistent with stop time calculations)
-      const midnightToday = new Date();
-      midnightToday.setHours(0, 0, 0, 0);
-      const sinceMidnight = (now.getTime() - midnightToday.getTime()) / 1000;
+      
+      // FINAL FIX: The EMMA API returns seconds since midnight in LOCAL time (Budapest)
+      // But we need to account for the timezone offset when creating Date objects
+      const timezoneOffsetMs = now.getTimezoneOffset() * 60 * 1000; // Convert minutes to milliseconds
+      const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const adjustedMidnight = new Date(localMidnight.getTime() + timezoneOffsetMs);
+      const sinceMidnight = (now.getTime() - localMidnight.getTime()) / 1000;
       
       const stops: TrainStop[] = trip.stoptimes.map((stoptime: any, index: number) => {
         const arrivalDelay = stoptime.arrivalDelay || 0;
@@ -278,27 +281,24 @@ class MavApiClient {
         maxDelay = Math.max(maxDelay, Math.abs(stopDelay));
 
         // Convert times from seconds since midnight to actual Date objects for today
-        // IMPORTANT: Create midnight in Hungary timezone (CET/CEST = UTC+1/+2)
-        // The EMMA API returns times in Hungarian local time
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // Set to midnight in local timezone
-        
-        const scheduledArrival = stoptime.scheduledArrival ? new Date(today.getTime() + stoptime.scheduledArrival * 1000) : undefined;
-        const realtimeArrival = stoptime.realtimeArrival ? new Date(today.getTime() + stoptime.realtimeArrival * 1000) : undefined;
-        const scheduledDeparture = stoptime.scheduledDeparture ? new Date(today.getTime() + stoptime.scheduledDeparture * 1000) : undefined;
-        const realtimeDeparture = stoptime.realtimeDeparture ? new Date(today.getTime() + stoptime.realtimeDeparture * 1000) : undefined;
+        // FINAL FIX: Use adjusted midnight to account for timezone offset
+        const scheduledArrival = stoptime.scheduledArrival ? new Date(adjustedMidnight.getTime() + stoptime.scheduledArrival * 1000) : undefined;
+        const realtimeArrival = stoptime.realtimeArrival ? new Date(adjustedMidnight.getTime() + stoptime.realtimeArrival * 1000) : undefined;
+        const scheduledDeparture = stoptime.scheduledDeparture ? new Date(adjustedMidnight.getTime() + stoptime.scheduledDeparture * 1000) : undefined;
+        const realtimeDeparture = stoptime.realtimeDeparture ? new Date(adjustedMidnight.getTime() + stoptime.realtimeDeparture * 1000) : undefined;
 
-        // Debug time conversion for TÓPART train specifically
-        if (trip.trainName?.includes('TÓPART') || trip.tripHeadsign?.includes('TÓPART')) {
-          console.log('TÓPART Stop time conversion:', {
+        // Debug time conversion for specific trains
+        if (trip.trainName?.includes('TÓPART') || trip.tripHeadsign?.includes('TÓPART') || 
+            trip.tripShortName?.includes('34924') || gtfsId.includes('34924')) {
+          console.log('Train time conversion debug:', {
+            trainId: trip.tripShortName || 'unknown',
             stopName: stoptime.stop.name,
             scheduledArrivalSeconds: stoptime.scheduledArrival,
             scheduledArrivalTime: scheduledArrival?.toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest' }),
             realtimeArrivalSeconds: stoptime.realtimeArrival,
             realtimeArrivalTime: realtimeArrival?.toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest' }),
-            todayMidnight: today.toISOString(),
-            serverTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            serverTime: now.toISOString()
+            adjustedMidnight: adjustedMidnight.toISOString(),
+            currentTime: now.toISOString()
           });
         }
 
@@ -322,16 +322,18 @@ class MavApiClient {
           isPassed = departureTime < (sinceMidnight - 300);
         }
 
-        // Debug isPassed calculation for TÓPART train specifically  
-        if (trip.trainName?.includes('TÓPART') || trip.tripHeadsign?.includes('TÓPART')) {
-          console.log('TÓPART Stop isPassed calculation:', {
+        // Debug isPassed calculation for specific trains
+        if (trip.trainName?.includes('TÓPART') || trip.tripHeadsign?.includes('TÓPART') || 
+            trip.tripShortName?.includes('34924') || gtfsId.includes('34924')) {
+          console.log('Train isPassed calculation debug:', {
+            trainId: trip.tripShortName || 'unknown',
             stopName: stoptime.stop.name,
             departureTime,
             arrivalTime,
             sinceMidnight,
             isPassed,
             currentTimeSeconds: sinceMidnight,
-            departureTimeHuman: departureTime > 0 ? new Date(today.getTime() + departureTime * 1000).toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest' }) : 'N/A'
+            departureTimeHuman: departureTime > 0 ? new Date(adjustedMidnight.getTime() + departureTime * 1000).toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest' }) : 'N/A'
           });
         }
 
