@@ -99,7 +99,7 @@ export function Navbar() {
 
           <div className="flex items-center">
             {/* Ki vagyok? link - Desktop */}
-            <div className="hidden sm:block">
+            <div className="hidden sm:flex sm:items-center sm:space-x-2">
               <Link
                 href="/ki-vagyok"
                 className={cn(
@@ -112,6 +112,20 @@ export function Navbar() {
                 <User className="h-4 w-4 mr-2" />
                 Ki vagyok?
               </Link>
+              
+              {/* Buy Me a Coffee button */}
+              <a 
+                href="https://www.buymeacoffee.com/aron.lukacs" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center"
+              >
+                <img 
+                  src="https://img.buymeacoffee.com/button-api/?text=Vegyél nekem egy kávét&emoji=&slug=aron.lukacs&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" 
+                  alt="Buy Me a Coffee"
+                  className="h-9"
+                />
+              </a>
             </div>
             
             {/* Mobile menu button */}
@@ -186,6 +200,20 @@ export function Navbar() {
             <User className="h-5 w-5 mr-3" />
             Ki vagyok?
           </Link>
+          
+          {/* Buy Me a Coffee - Mobile */}
+          <a 
+            href="https://www.buymeacoffee.com/aron.lukacs" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center px-3 py-2"
+          >
+            <img 
+              src="https://img.buymeacoffee.com/button-api/?text=Vegyél nekem egy kávét&emoji=&slug=aron.lukacs&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" 
+              alt="Buy Me a Coffee"
+              className="h-10"
+            />
+          </a>
         </div>
       </div>
     </nav>
