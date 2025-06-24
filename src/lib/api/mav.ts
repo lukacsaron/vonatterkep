@@ -216,6 +216,7 @@ class MavApiClient {
               name 
               lat 
               lon 
+              platformCode
             }
           } 
         } 
@@ -359,7 +360,7 @@ class MavApiClient {
           actualArrival: realtimeArrival,
           scheduledDeparture,
           actualDeparture: realtimeDeparture,
-          platform: '', // TODO: Not available in EMMA API - consider fetching from GetVonatInfo endpoint
+          platform: stoptime.stop.platformCode || '', // Now available from EMMA API
           arrivalDelay: Math.round(arrivalDelay / 60), // Convert to minutes
           departureDelay: 0, // Not available
           isPassed
