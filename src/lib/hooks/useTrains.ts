@@ -7,48 +7,44 @@ import { api } from '@/lib/api/client';
 export function useTrains() {
   const queryClient = useQueryClient();
 
-  // The useQuery hook is now for INITIAL data load only.
-  // It will not refetch. Updates come via WebSocket.
+  // Poll for updates every 30 seconds until WebSocket is implemented
   const queryInfo = useQuery({
     queryKey: ['trains'],
     queryFn: () => api.get<Train[]>('/trains'),
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchInterval: false,
+    staleTime: 15000, // 15 seconds
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 30000, // 30 seconds
   });
 
-  useEffect(() => {
-    // Connect to the WebSocket server
-    const socket: Socket = io({ path: '/api/socket' });
+  // TODO: Re-enable WebSocket when backend is ready
+  // useEffect(() => {
+  //   // Connect to the WebSocket server
+  //   const socket: Socket = io({ path: '/api/socket' });
 
-    socket.on('connect', () => {
-      console.log('🔌 WebSocket connected:', socket.id);
-    });
+  //   socket.on('connect', () => {
+  //     console.log('🔌 WebSocket connected:', socket.id);
+  //   });
 
-    // Listener for real-time updates
-    socket.on('trains-update', (trains: Train[]) => {
-      console.log(`📡 Received ${trains.length} train updates via WebSocket.`);
-      // Manually update the TanStack Query cache with the new data.
-      // This will automatically re-render all components using this hook.
-      queryClient.setQueryData(['trains'], trains);
-    });
+  //   // Listener for real-time updates
+  //   socket.on('trains-update', (trains: Train[]) => {
+  //     console.log(`📡 Received ${trains.length} train updates via WebSocket.`);
+  //     queryClient.setQueryData(['trains'], trains);
+  //   });
     
-    // Listener for initial data if the first API call was empty
-    socket.on('initial-data', (trains: Train[]) => {
-        console.log(`📂 Received ${trains.length} initial trains via WebSocket.`);
-        queryClient.setQueryData(['trains'], trains);
-    });
+  //   socket.on('initial-data', (trains: Train[]) => {
+  //       console.log(`📂 Received ${trains.length} initial trains via WebSocket.`);
+  //       queryClient.setQueryData(['trains'], trains);
+  //   });
 
-    socket.on('disconnect', () => {
-      console.log('🔌 WebSocket disconnected.');
-    });
+  //   socket.on('disconnect', () => {
+  //     console.log('🔌 WebSocket disconnected.');
+  //   });
 
-    // Cleanup on component unmount
-    return () => {
-      socket.disconnect();
-    };
-  }, [queryClient]);
+  //   return () => {
+  //     socket.disconnect();
+  //   };
+  // }, [queryClient]);
 
   // Return the same data structure as before for component compatibility
   return queryInfo;
