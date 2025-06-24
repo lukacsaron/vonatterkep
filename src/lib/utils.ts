@@ -41,6 +41,7 @@ export function formatTime(date: Date | string): string {
   return d.toLocaleTimeString('hu-HU', {
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'Europe/Budapest', // Explicitly use Hungary timezone
   });
 }
 

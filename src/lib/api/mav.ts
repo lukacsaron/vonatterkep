@@ -243,6 +243,19 @@ class MavApiClient {
       
       const trip = (data as any)?.data?.trip;
       
+      // Debug TÓPART train specifically
+      if (trip?.trainName?.includes('TÓPART') || trip?.tripHeadsign?.includes('TÓPART')) {
+        console.log('TÓPART train data:', {
+          gtfsId,
+          serviceDay,
+          tripHeadsign: trip.tripHeadsign,
+          trainName: trip.trainName,
+          stoptimesCount: trip.stoptimes?.length,
+          firstStopExample: trip.stoptimes?.[0],
+          lastStopExample: trip.stoptimes?.[trip.stoptimes?.length - 1]
+        });
+      }
+      
       if (!trip || !trip.stoptimes) {
         console.warn(`🚨 No trip data found for ${gtfsId}:`, { trip, hasStoptimes: !!trip?.stoptimes });
         return null;
@@ -253,7 +266,10 @@ class MavApiClient {
       // Calculate current delay and time logic like holavonat
       let maxDelay = 0;
       const now = new Date();
-      const sinceMidnight = (now.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 1000;
+      // Calculate seconds since midnight in local timezone (consistent with stop time calculations)
+      const midnightToday = new Date();
+      midnightToday.setHours(0, 0, 0, 0);
+      const sinceMidnight = (now.getTime() - midnightToday.getTime()) / 1000;
       
       const stops: TrainStop[] = trip.stoptimes.map((stoptime: any, index: number) => {
         const arrivalDelay = stoptime.arrivalDelay || 0;
@@ -262,15 +278,62 @@ class MavApiClient {
         maxDelay = Math.max(maxDelay, Math.abs(stopDelay));
 
         // Convert times from seconds since midnight to actual Date objects for today
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        // IMPORTANT: Create midnight in Hungary timezone (CET/CEST = UTC+1/+2)
+        // The EMMA API returns times in Hungarian local time
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Set to midnight in local timezone
+        
         const scheduledArrival = stoptime.scheduledArrival ? new Date(today.getTime() + stoptime.scheduledArrival * 1000) : undefined;
         const realtimeArrival = stoptime.realtimeArrival ? new Date(today.getTime() + stoptime.realtimeArrival * 1000) : undefined;
         const scheduledDeparture = stoptime.scheduledDeparture ? new Date(today.getTime() + stoptime.scheduledDeparture * 1000) : undefined;
         const realtimeDeparture = stoptime.realtimeDeparture ? new Date(today.getTime() + stoptime.realtimeDeparture * 1000) : undefined;
 
-        // Determine if stop is in the past (like holavonat does)
+        // Debug time conversion for TÓPART train specifically
+        if (trip.trainName?.includes('TÓPART') || trip.tripHeadsign?.includes('TÓPART')) {
+          console.log('TÓPART Stop time conversion:', {
+            stopName: stoptime.stop.name,
+            scheduledArrivalSeconds: stoptime.scheduledArrival,
+            scheduledArrivalTime: scheduledArrival?.toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest' }),
+            realtimeArrivalSeconds: stoptime.realtimeArrival,
+            realtimeArrivalTime: realtimeArrival?.toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest' }),
+            todayMidnight: today.toISOString(),
+            serverTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            serverTime: now.toISOString()
+          });
+        }
+
+        // Determine if stop is in the past (improved logic)
+        // Use the later of realtime or scheduled departure time to determine if passed
         const departureTime = stoptime.realtimeDeparture || stoptime.scheduledDeparture || 0;
-        const isPassed = departureTime > 0 && departureTime < sinceMidnight;
+        const arrivalTime = stoptime.realtimeArrival || stoptime.scheduledArrival || 0;
+        
+        // A stop is considered "passed" if:
+        // 1. It has a departure time AND that time is more than 5 minutes ago (to account for brief stops)
+        // 2. OR it only has arrival time AND that was more than 10 minutes ago
+        let isPassed = false;
+        if (departureTime > 0) {
+          isPassed = departureTime < (sinceMidnight - 300); // 5 minutes margin for departures
+        } else if (arrivalTime > 0) {
+          isPassed = arrivalTime < (sinceMidnight - 600); // 10 minutes margin for arrivals only
+        }
+        
+        // Special case: if this is the first stop, it's only passed if departure was more than 5 minutes ago
+        if (index === 0 && departureTime > 0) {
+          isPassed = departureTime < (sinceMidnight - 300);
+        }
+
+        // Debug isPassed calculation for TÓPART train specifically  
+        if (trip.trainName?.includes('TÓPART') || trip.tripHeadsign?.includes('TÓPART')) {
+          console.log('TÓPART Stop isPassed calculation:', {
+            stopName: stoptime.stop.name,
+            departureTime,
+            arrivalTime,
+            sinceMidnight,
+            isPassed,
+            currentTimeSeconds: sinceMidnight,
+            departureTimeHuman: departureTime > 0 ? new Date(today.getTime() + departureTime * 1000).toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest' }) : 'N/A'
+          });
+        }
 
         return {
           name: stoptime.stop.name,
