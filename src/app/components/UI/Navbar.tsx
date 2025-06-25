@@ -121,7 +121,7 @@ export function Navbar() {
                 className="inline-flex items-center"
               >
                 <img 
-                  src="https://img.buymeacoffee.com/button-api/?text=Vegyél nekem egy kávét&emoji=&slug=aron.lukacs&button_colour=FFDD00&font_colour=000000&font_family=Poppins&outline_colour=000000&coffee_colour=ffffff" 
+                  src="https://img.buymeacoffee.com/button-api/?text=Segíts be egy kávé árával&emoji=☕&slug=aron.lukacs&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" 
                   alt="Buy Me a Coffee"
                   className="h-9"
                 />
@@ -209,7 +209,7 @@ export function Navbar() {
             className="flex items-center px-3 py-2"
           >
             <img 
-              src="https://img.buymeacoffee.com/button-api/?text=Vegyél nekem egy kávét&emoji=&slug=aron.lukacs&button_colour=FFDD00&font_colour=000000&font_family=Poppins&outline_colour=000000&coffee_colour=ffffff" 
+              src="https://img.buymeacoffee.com/button-api/?text=Segíts be egy kávé árával&emoji=☕&slug=aron.lukacs&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" 
               alt="Buy Me a Coffee"
               className="h-10"
             />
