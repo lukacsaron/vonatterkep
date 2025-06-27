@@ -7,22 +7,22 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function getDelayCategory(delayMinutes: number): DelayCategory {
-  // Match holavonat's exact delay categories
+  // Updated delay categories with new intervals
   if (delayMinutes <= 4) return DelayCategory.ON_TIME;     // 0-4 perc késés
-  if (delayMinutes <= 14) return DelayCategory.MINOR;     // 5-14 perc késés  
-  if (delayMinutes <= 59) return DelayCategory.MODERATE;  // 15-59 perc késés
+  if (delayMinutes <= 19) return DelayCategory.MINOR;     // 5-19 perc késés  
+  if (delayMinutes <= 59) return DelayCategory.MODERATE;  // 20-59 perc késés
   return DelayCategory.SEVERE;                            // 60+ perc késés
 }
 
 export function getDelayColor(category: DelayCategory): string {
-  // Beautiful, softer colors (keep holavonat's delay ranges but better colors)
+  // Beautiful, softer colors with updated delay ranges
   switch (category) {
     case DelayCategory.ON_TIME:
       return '#10b981'; // beautiful green (0-4 perc késés)
     case DelayCategory.MINOR:
-      return '#eab308'; // beautiful yellow (5-14 perc késés)
+      return '#eab308'; // beautiful yellow (5-19 perc késés)
     case DelayCategory.MODERATE:
-      return '#f97316'; // beautiful orange (15-59 perc késés)
+      return '#f97316'; // beautiful orange (20-59 perc késés)
     case DelayCategory.SEVERE:
       return '#ef4444'; // beautiful red (60+ perc késés)
   }

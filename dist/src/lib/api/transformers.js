@@ -190,7 +190,7 @@ function getDepartureStatus(mavDeparture) {
     if (departureTime < now) {
         return types_1.DepartureStatus.DEPARTED;
     }
-    if (delay > 30) {
+    if (delay >= 20) {
         return types_1.DepartureStatus.DELAYED;
     }
     return types_1.DepartureStatus.ON_TIME;
@@ -202,7 +202,7 @@ function getArrivalStatus(mavArrival) {
     if (arrivalTime < now) {
         return types_1.DepartureStatus.DEPARTED; // Use DEPARTED to indicate "ARRIVED"
     }
-    if (delay > 30) {
+    if (delay >= 20) {
         return types_1.DepartureStatus.DELAYED;
     }
     return types_1.DepartureStatus.ON_TIME;

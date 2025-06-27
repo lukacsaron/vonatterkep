@@ -203,7 +203,7 @@ function getDepartureStatus(mavDeparture: MavDeparture): DepartureStatus {
     return DepartureStatus.DEPARTED;
   }
   
-  if (delay > 30) {
+  if (delay >= 20) {
     return DepartureStatus.DELAYED;
   }
   
@@ -219,7 +219,7 @@ function getArrivalStatus(mavArrival: MavArrival): DepartureStatus {
     return DepartureStatus.DEPARTED; // Use DEPARTED to indicate "ARRIVED"
   }
   
-  if (delay > 30) {
+  if (delay >= 20) {
     return DepartureStatus.DELAYED;
   }
   

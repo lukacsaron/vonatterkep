@@ -135,8 +135,8 @@ export enum DepartureStatus {
 
 export enum DelayCategory {
   ON_TIME = 'ON_TIME',     // 0-4 perc késés (green)
-  MINOR = 'MINOR',         // 5-14 perc késés (yellow)
-  MODERATE = 'MODERATE',   // 15-59 perc késés (orange)
+  MINOR = 'MINOR',         // 5-19 perc késés (yellow)
+  MODERATE = 'MODERATE',   // 20-59 perc késés (orange)
   SEVERE = 'SEVERE',       // 60+ perc késés (red)
 }
 

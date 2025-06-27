@@ -658,8 +658,8 @@ class MavApiClient {
       console.log(`✅ Fetched ${trainsWithDelays.length} trains with delay information:`);
       console.log(`  📊 Delays fetched for: ${allDelayResults.length}/${trainsWithGtfsId.length} trains`);
       console.log(`  🟢 On-time (0-4 min): ${trainsWithDelays.filter(t => t.Keses <= 4).length}`);
-      console.log(`  🟡 Minor delay (5-14 min): ${trainsWithDelay.filter(t => t.Keses >= 5 && t.Keses <= 14).length}`);
-      console.log(`  🟠 Moderate delay (15-59 min): ${trainsWithDelay.filter(t => t.Keses >= 15 && t.Keses <= 59).length}`);
+      console.log(`  🟡 Minor delay (5-19 min): ${trainsWithDelay.filter(t => t.Keses >= 5 && t.Keses <= 19).length}`);
+      console.log(`  🟠 Moderate delay (20-59 min): ${trainsWithDelay.filter(t => t.Keses >= 20 && t.Keses <= 59).length}`);
       console.log(`  🔴 Severe delay (60+ min): ${trainsWithDelay.filter(t => t.Keses >= 60).length}`);
       
       return trainsWithDelays;
