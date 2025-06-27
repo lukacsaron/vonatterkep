@@ -15,9 +15,11 @@ import { getDelayCategory, getDelayColor } from '@/lib/utils';
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Set Mapbox access token (hardcoded)
-const MAPBOX_TOKEN = 'pk.eyJ1IjoiYXJvbmx1a2FjcyIsImEiOiJjbWM4eTZyOXAweW5uMmtzM3hmanhtNzlxIn0.iZgLUL05MUWcOI_03e1EFA';
-mapboxgl.accessToken = MAPBOX_TOKEN;
+// Set Mapbox access token from environment
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+if (MAPBOX_TOKEN) {
+  mapboxgl.accessToken = MAPBOX_TOKEN;
+}
 
 function TrainMapComponent() {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -278,7 +280,7 @@ function TrainMapComponent() {
         },
         paint: {
           'text-color': ['get', 'color'],
-          'text-halo-color': '#ffffff',
+          'text-halo-color': '#374151',
           'text-halo-width': 1.25
         }
       });
@@ -292,7 +294,7 @@ function TrainMapComponent() {
           'circle-radius': 8, // Covers triangle base, lets tip extend
           'circle-color': ['get', 'color'],
           'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff'
+          'circle-stroke-color': '#374151'
         }
       });
 
@@ -338,13 +340,13 @@ function TrainMapComponent() {
       const avgLng = allLngs.reduce((a, b) => a + b, 0) / allLngs.length;
       console.log('  Average coords:', { lat: avgLat, lng: avgLng });
       
-      // Debug delay distribution
+      // Debug delay distribution (aligned with main delay categories)
       const delays = features.map(f => f.properties.delay);
       const delayBuckets = {
-        onTime: delays.filter(d => d < 5).length,
-        minor: delays.filter(d => d >= 5 && d < 15).length,
-        moderate: delays.filter(d => d >= 15 && d < 30).length,
-        severe: delays.filter(d => d >= 30).length
+        onTime: delays.filter(d => d <= 4).length,        // 0-4 perc késés
+        minor: delays.filter(d => d >= 5 && d <= 19).length,      // 5-19 perc késés
+        moderate: delays.filter(d => d >= 20 && d <= 59).length,  // 20-59 perc késés
+        severe: delays.filter(d => d >= 60).length                // 60+ perc késés
       };
       console.log('  Delay distribution:', delayBuckets);
       console.log('  Sample delays:', delays.slice(0, 10));
