@@ -24,8 +24,11 @@ export function parseUIC(vehicleId: string): UICParseResult {
   // Extract UIC code from EMMA format "1:915504310018" -> "915504310018"
   const rawUIC = vehicleId.includes(':') ? vehicleId.split(':')[1] : vehicleId;
   
+  console.log(`🔍 UIC Parser input: "${vehicleId}" -> raw: "${rawUIC}"`);
+  
   // Validate UIC length (should be 12 digits for Hungarian rolling stock)
   if (!rawUIC || rawUIC.length < 8) {
+    console.log(`❌ UIC validation failed: length ${rawUIC?.length || 0}, expected >=8`);
     return {
       vehicleType: 'unknown',
       propulsion: null,
@@ -40,6 +43,8 @@ export function parseUIC(vehicleId: string): UICParseResult {
   const vehicleTypeCode = rawUIC.substring(0, 2);
   const countryCode = rawUIC.substring(2, 4);
   const typeCode = rawUIC.substring(4, 8);
+  
+  console.log(`🔍 UIC components: type=${vehicleTypeCode}, country=${countryCode}, typeCode=${typeCode}`);
   
   // Determine vehicle type and propulsion from first two digits
   let vehicleType: 'locomotive' | 'emu' | 'dmu' | 'unknown' = 'unknown';
