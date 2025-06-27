@@ -6,20 +6,13 @@
 @font-face {
   font-family: 'MNR2007';
   src: url('/fonts/mnr2007.ttf') format('truetype');
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'MNR2007 Fallback';
-  src: local('Arial');
-  ascent-override: 43.99%;
-  descent-override: 11.87%;
-  line-gap-override: 0.00%;
-  size-adjust: 211.41%;
+  font-display: optional;
+  font-weight: normal;
+  font-style: normal;
 }
 
 .mnr-font {
-  font-family: 'MNR2007', 'MNR2007 Fallback', monospace;
+  font-family: 'MNR2007', 'Courier New', monospace;
 }
 
 /* Custom styles for the app */

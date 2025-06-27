@@ -71,7 +71,12 @@ export const CHARACTER_TO_UIC: Record<string, string> = Object.fromEntries(
  * Get MNR2007 font character for a given UIC code
  */
 export function getMNRCharacter(uicCode: string): string | null {
-  return MNR_FONT_MAPPING[uicCode] || null;
+  try {
+    return MNR_FONT_MAPPING[uicCode] || null;
+  } catch (error) {
+    console.warn('Error getting MNR character:', error);
+    return null;
+  }
 }
 
 /**
@@ -135,7 +140,12 @@ export const SERVICE_DESCRIPTIONS: Record<number, string> = {
  * Get MNR2007 service character for fontCode
  */
 export function getMNRServiceCharacter(fontCode: number): string | null {
-  return MNR_SERVICE_CODES[fontCode] || null;
+  try {
+    return MNR_SERVICE_CODES[fontCode] || null;
+  } catch (error) {
+    console.warn('Error getting MNR service character:', error);
+    return null;
+  }
 }
 
 /**

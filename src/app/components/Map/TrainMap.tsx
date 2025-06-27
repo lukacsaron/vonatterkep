@@ -18,7 +18,9 @@ import { cn } from '@/lib/utils';
 // Set Mapbox access token from environment variable
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
-if (MAPBOX_TOKEN) {
+if (!MAPBOX_TOKEN) {
+  console.error('NEXT_PUBLIC_MAPBOX_TOKEN environment variable is not set');
+} else {
   mapboxgl.accessToken = MAPBOX_TOKEN;
 }
 
