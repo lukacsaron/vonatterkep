@@ -15,14 +15,8 @@ import { getDelayCategory, getDelayColor } from '@/lib/utils';
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Set Mapbox access token from environment variable
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-
-if (!MAPBOX_TOKEN) {
-  console.error('NEXT_PUBLIC_MAPBOX_TOKEN environment variable is not set');
-} else {
-  mapboxgl.accessToken = MAPBOX_TOKEN;
-}
+// Set Mapbox access token - hardcoded for simplicity
+mapboxgl.accessToken = 'pk.eyJ1IjoiYXJvbmx1a2FjcyIsImEiOiJjbWNmY3dzYTEwODJsMm1xeDRjcWlqNDM1In0.dp1ZMJivifhXprb0bzprTQ';
 
 function TrainMapComponent() {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -41,7 +35,6 @@ function TrainMapComponent() {
   const [isInitialLocationSet, setIsInitialLocationSet] = useState(false);
 
   console.log('TrainMap render:', { 
-    hasToken: !!MAPBOX_TOKEN, 
     mapReady, 
     trainsCount: trains?.length,
     mapError,
@@ -53,7 +46,7 @@ function TrainMapComponent() {
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
-    console.log('Initializing map with token:', !!MAPBOX_TOKEN);
+    console.log('Initializing map...');
 
     try {
       // Initialize map centered on Hungary
@@ -539,17 +532,6 @@ function TrainMapComponent() {
     return el;
   }, []); // No dependencies needed since it only uses pure DOM operations
 
-  if (!mapboxgl.accessToken) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-100">
-        <div className="text-center">
-          <p className="text-gray-600 mb-2">A térkép nem tölthető be</p>
-          <p className="text-sm text-gray-500">Állítsd be a NEXT_PUBLIC_MAPBOX_TOKEN-t</p>
-          <p className="text-xs text-gray-400 mt-2">Token találva: {!!MAPBOX_TOKEN ? 'Igen' : 'Nem'}</p>
-        </div>
-      </div>
-    );
-  }
 
   if (mapError) {
     return (
