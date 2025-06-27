@@ -1,9 +1,14 @@
 import { Train, TrainDetails } from '@/types';
 import { TrainTypeBadge } from '../UI/TrainTypeBadge';
 import { DelayIndicator } from '../UI/DelayIndicator';
-import { MapPin, Navigation, Clock, Gauge, X } from 'lucide-react';
+import { MapPin, Navigation, Clock, Gauge, X, Zap, Settings, Thermometer } from 'lucide-react';
 import { formatTime } from '@/lib/utils';
 import { useState, useEffect, useRef } from 'react';
+import { 
+  getTrainTypeEmoji, 
+  getComfortDescription, 
+  getReliabilityStars 
+} from '@/lib/uicParser';
 
 interface TrainInfoCardProps {
   train: Train;
@@ -158,6 +163,77 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
             </span>
           </div>
         </div>
+
+        {/* Locomotive Information */}
+        {train.locomotiveType && (
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+              <span className="text-xl">{getTrainTypeEmoji(train.locomotiveType)}</span>
+              Jármű információ
+            </h4>
+            
+            <div className="space-y-2">
+              {/* Train Type and Nickname */}
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-gray-900">
+                  {train.locomotiveType.name}
+                  {train.locomotiveType.nickname && (
+                    <span className="text-gray-600 ml-1">&ldquo;{train.locomotiveType.nickname}&rdquo;</span>
+                  )}
+                </span>
+                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                  {train.locomotiveType.category === 'locomotive' ? 'Mozdony' : 
+                   train.locomotiveType.category === 'emu' ? 'Motorvonat' :
+                   train.locomotiveType.category === 'dmu' ? 'Dízel motorvonat' : 'Motorkocsi'}
+                </span>
+              </div>
+
+              {/* Manufacturer and Year */}
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">{train.locomotiveType.manufacturer}</span> 
+                {' • '}{train.locomotiveType.yearIntroduced}
+                {train.locomotiveType.modernized && (
+                  <span> • Korszerűsítve: {train.locomotiveType.modernized}</span>
+                )}
+              </div>
+
+              {/* Comfort Features */}
+              <div className="flex items-center gap-3 text-xs">
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full ${
+                  train.locomotiveType.hasAirConditioning 
+                    ? 'bg-blue-100 text-blue-800' 
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  <Thermometer size={12} />
+                  {train.locomotiveType.hasAirConditioning ? 'Klímás' : 'Nincs klíma'}
+                </div>
+
+                <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-800 rounded-full">
+                  <Gauge size={12} />
+                  {train.locomotiveType.maxSpeed} km/h
+                </div>
+
+                <div className="flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full">
+                  <span>{getReliabilityStars(train.locomotiveType.reliabilityRating)}</span>
+                </div>
+              </div>
+
+              {/* Operational Notes */}
+              {train.locomotiveType.operationalNotes && (
+                <div className="text-xs text-gray-500 italic">
+                  {train.locomotiveType.operationalNotes}
+                </div>
+              )}
+
+              {/* UIC Debug Info (only in development) */}
+              {process.env.NODE_ENV === 'development' && train.uicInfo && (
+                <div className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-200">
+                  UIC: {train.uicInfo.rawUIC} • Konfidencia: {(train.uicInfo.confidence * 100).toFixed(0)}%
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Loading state */}
         {loading && (

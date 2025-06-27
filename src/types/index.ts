@@ -28,6 +28,9 @@ export interface Train {
   trainName?: string;     // Route name like "S60"
   lastUpdate?: Date;      // When position was last updated
   isMoving?: boolean;     // Whether train is currently moving
+  // UIC locomotive type detection
+  locomotiveType?: import('./trainTypes').TrainType;  // Detected locomotive/EMU type
+  uicInfo?: import('./trainTypes').UICParseResult;    // Raw UIC parsing result
 }
 
 export interface TrainStop {

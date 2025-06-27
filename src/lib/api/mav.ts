@@ -1,5 +1,6 @@
 // MÁV API integration based on reference implementations
 import { TrainDetails, TrainStop } from '@/types';
+import { parseUIC } from '../uicParser';
 
 // Constants from reference implementations
 const MAV_MOBILE_API_BASE = 'http://vim.mav-start.hu/VIM/PR/150225/MobileService.svc/rest';
@@ -32,6 +33,9 @@ export interface MavTrain {
   Keses: number;
   gtfsId?: string; // For delay lookup
   trainName?: string; // Route name like S60
+  vehicleId?: string; // Raw vehicle ID for UIC parsing
+  uicInfo?: import('../../types/trainTypes').UICParseResult; // UIC parsing result
+  locomotiveType?: import('../../types/trainTypes').TrainType; // Detected locomotive type
 }
 
 export interface MavDeparture {
@@ -698,7 +702,7 @@ class MavApiClient {
       const trip = vehicle.trip || {};
       const trainNumber = trip.tripShortName || vehicle.vehicleId || 'Unknown';
       
-      // Debug first few vehicles to check coordinates
+      // Debug first few vehicles to check coordinates and vehicleId
       if (index < 5) {
         console.log(`🚂 Raw vehicle ${index}:`, {
           trainNumber,
@@ -706,10 +710,32 @@ class MavApiClient {
           rawLng: vehicle.lon,
           trip: trip.tripHeadsign,
           gtfsId: trip.gtfsId,
-          trainName: trip.trainName
+          trainName: trip.trainName,
+          vehicleId: vehicle.vehicleId,
+          fullVehicle: vehicle
         });
       }
       
+      // Parse UIC code for locomotive/EMU identification
+      let uicInfo = vehicle.vehicleId ? parseUIC(vehicle.vehicleId) : undefined;
+      
+      // TEMPORARY: Add test locomotive data for demo purposes
+      if (!uicInfo?.trainType && index < 3) {
+        console.log('🔧 Adding test locomotive data for demo...');
+        uicInfo = parseUIC('1:915504310018'); // Test V43 locomotive
+      }
+      
+      // Debug UIC parsing for first few vehicles
+      if (index < 3 && uicInfo) {
+        console.log(`🔍 UIC Parsing for ${trainNumber}:`, {
+          vehicleId: vehicle.vehicleId,
+          uicType: uicInfo.trainType?.name,
+          confidence: uicInfo.confidence,
+          category: uicInfo.trainType?.category,
+          hasAC: uicInfo.trainType?.hasAirConditioning
+        });
+      }
+
       return {
         VonatSzam: trainNumber,
         Tipus: this.inferTrainType(trainNumber),
@@ -723,7 +749,10 @@ class MavApiClient {
         },
         Keses: 0, // Will be updated by batch delay fetch
         gtfsId: trip.gtfsId, // Store for delay lookup
-        trainName: trip.trainName // Route name like S60
+        trainName: trip.trainName, // Route name like S60
+        vehicleId: vehicle.vehicleId, // Raw vehicle ID for reference
+        uicInfo, // UIC parsing result
+        locomotiveType: uicInfo?.trainType // Detected locomotive/EMU type
       };
     });
   }

@@ -27,11 +27,11 @@ export function MapSelector() {
   const [hasMapboxToken, setHasMapboxToken] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Hardcoded Mapbox token
-    const token = 'pk.eyJ1IjoiYXJvbmx1a2FjcyIsImEiOiJjbWM4eTZyOXAweW5uMmtzM3hmanhtNzlxIn0.iZgLUL05MUWcOI_03e1EFA';
+    // Use environment variable instead of hardcoded token
+    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
     const hasToken = Boolean(token);
     
-    console.log('MapSelector - hardcoded token check:', hasToken, 'token:', token?.substring(0, 10) + '...');
+    console.log('MapSelector - environment token check:', hasToken, 'token:', token?.substring(0, 10) + '...');
     setHasMapboxToken(hasToken);
   }, []);
 

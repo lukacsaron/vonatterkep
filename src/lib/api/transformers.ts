@@ -35,7 +35,10 @@ export function transformMavTrain(mavTrain: MavTrain): Train {
     gtfsId: mavTrain.gtfsId,
     trainName: mavTrain.trainName,
     lastUpdate: mavTrain.UtolsoGPS?.Ido ? new Date(mavTrain.UtolsoGPS.Ido) : new Date(),
-    isMoving: (mavTrain.UtolsoGPS?.Sebesseg || 0) > 5 // Consider moving if speed > 5 km/h
+    isMoving: (mavTrain.UtolsoGPS?.Sebesseg || 0) > 5, // Consider moving if speed > 5 km/h
+    // UIC locomotive type detection
+    locomotiveType: mavTrain.locomotiveType,
+    uicInfo: mavTrain.uicInfo
   };
   
   // Debug coordinate transformation

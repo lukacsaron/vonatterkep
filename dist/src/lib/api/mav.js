@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.mavApi = void 0;
+const uicParser_1 = require("../uicParser");
 // Constants from reference implementations
 const MAV_MOBILE_API_BASE = 'http://vim.mav-start.hu/VIM/PR/150225/MobileService.svc/rest';
 const MAV_EMMA_API_BASE = 'https://emma.mav.hu/otp2-backend/otp/routers/default/index/graphql'; // Correct endpoint from holavonat-app
@@ -529,8 +530,8 @@ class MavApiClient {
             console.log(`✅ Fetched ${trainsWithDelays.length} trains with delay information:`);
             console.log(`  📊 Delays fetched for: ${allDelayResults.length}/${trainsWithGtfsId.length} trains`);
             console.log(`  🟢 On-time (0-4 min): ${trainsWithDelays.filter(t => t.Keses <= 4).length}`);
-            console.log(`  🟡 Minor delay (5-14 min): ${trainsWithDelay.filter(t => t.Keses >= 5 && t.Keses <= 14).length}`);
-            console.log(`  🟠 Moderate delay (15-59 min): ${trainsWithDelay.filter(t => t.Keses >= 15 && t.Keses <= 59).length}`);
+            console.log(`  🟡 Minor delay (5-19 min): ${trainsWithDelay.filter(t => t.Keses >= 5 && t.Keses <= 19).length}`);
+            console.log(`  🟠 Moderate delay (20-59 min): ${trainsWithDelay.filter(t => t.Keses >= 20 && t.Keses <= 59).length}`);
             console.log(`  🔴 Severe delay (60+ min): ${trainsWithDelay.filter(t => t.Keses >= 60).length}`);
             return trainsWithDelays;
         }
@@ -561,6 +562,7 @@ class MavApiClient {
     transformHolavonatData(vehicles) {
         console.log('🔄 Transforming holavonat vehicle data...');
         return vehicles.map((vehicle, index) => {
+            var _a, _b, _c;
             const trip = vehicle.trip || {};
             const trainNumber = trip.tripShortName || vehicle.vehicleId || 'Unknown';
             // Debug first few vehicles to check coordinates
@@ -572,6 +574,18 @@ class MavApiClient {
                     trip: trip.tripHeadsign,
                     gtfsId: trip.gtfsId,
                     trainName: trip.trainName
+                });
+            }
+            // Parse UIC code for locomotive/EMU identification
+            const uicInfo = vehicle.vehicleId ? (0, uicParser_1.parseUIC)(vehicle.vehicleId) : undefined;
+            // Debug UIC parsing for first few vehicles
+            if (index < 3 && uicInfo) {
+                console.log(`🔍 UIC Parsing for ${trainNumber}:`, {
+                    vehicleId: vehicle.vehicleId,
+                    uicType: (_a = uicInfo.trainType) === null || _a === void 0 ? void 0 : _a.name,
+                    confidence: uicInfo.confidence,
+                    category: (_b = uicInfo.trainType) === null || _b === void 0 ? void 0 : _b.category,
+                    hasAC: (_c = uicInfo.trainType) === null || _c === void 0 ? void 0 : _c.hasAirConditioning
                 });
             }
             return {
@@ -587,7 +601,10 @@ class MavApiClient {
                 },
                 Keses: 0, // Will be updated by batch delay fetch
                 gtfsId: trip.gtfsId, // Store for delay lookup
-                trainName: trip.trainName // Route name like S60
+                trainName: trip.trainName, // Route name like S60
+                vehicleId: vehicle.vehicleId, // Raw vehicle ID for reference
+                uicInfo, // UIC parsing result
+                locomotiveType: uicInfo === null || uicInfo === void 0 ? void 0 : uicInfo.trainType // Detected locomotive/EMU type
             };
         });
     }
