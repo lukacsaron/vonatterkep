@@ -9,6 +9,11 @@ import {
   getComfortDescription, 
   getReliabilityStars 
 } from '@/lib/uicParser';
+import { 
+  TRAIN_TYPE_DESCRIPTIONS, 
+  getMNRServiceCharacter, 
+  getServiceDescription 
+} from '@/lib/mnrFont';
 
 interface TrainInfoCardProps {
   train: Train;
@@ -125,91 +130,166 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
 
   return (
     <div ref={cardRef} className="bg-white rounded-l-3xl shadow-xl min-w-[350px] max-w-[400px] max-h-[80vh] relative border-l border-gray-300 overflow-hidden">
-      {/* Header with gradient background */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 relative shadow-lg">
+      {/* Header - Clean design matching app theme */}
+      <div className="bg-white border-b-2 border-blue-500 p-4 relative">
         <div className="flex justify-between items-center">
-          <h2 className="text-xl font-bold">
-            {getRouteCode()}
-          </h2>
-          <h2 className="text-xl font-bold text-center">
-            {train.number}
-          </h2>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-8 bg-blue-500 rounded"></div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">
+                {train.number}
+              </h2>
+              {getRouteCode() && (
+                <div className="text-sm text-blue-600 font-medium">
+                  {getRouteCode()}
+                </div>
+              )}
+            </div>
+          </div>
           {onClose && (
             <button
               onClick={onClose}
-              className="text-white hover:text-gray-200 text-xl cursor-pointer transition-colors duration-200 hover:bg-white/20 rounded-full p-1"
+              className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
               aria-label="Bezárás"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           )}
         </div>
         
-        {/* Status information */}
-        <div className="text-sm mt-2 flex gap-4 flex-wrap">
-          {train.uicInfo && (
-            <span className="flex items-center gap-1">
-              <span className="opacity-80">UIC kód:</span>
-              <span className="font-semibold text-white font-mono">
-                {train.uicInfo.rawUIC?.replace(/(.{2})(.{2})(.{4})(.+)/, '$1 $2 $3 $4')}
-              </span>
-            </span>
-          )}
-          <span className="flex items-center gap-1">
-            <span className="opacity-80">Sebesség:</span>
-            <span className="font-semibold text-white">{Math.round(train.speed)} km/h</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="opacity-80">Késés:</span>
-            <span className={`font-semibold ${trainDetails?.delay && trainDetails.delay > 0 ? 'text-yellow-200' : 'text-green-200'}`}>
-              {getDelayText(trainDetails?.delay ?? train.delay)}
-            </span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="opacity-80">Frissítve:</span>
-            <span className="font-semibold text-white">1 perccel ezelőtt</span>
+        {/* Route direction */}
+        <div className="text-sm mt-3 text-gray-600 flex items-center">
+          <span className="font-medium">Cél:</span>
+          <span className="ml-2 font-semibold text-gray-900">
+            {trainDetails?.destination?.name || train.destination?.name || 'Ismeretlen'}
           </span>
         </div>
         
-        {/* Route direction */}
-        <div className="text-xs mt-2 opacity-80">
-          <span className="font-semibold">Ismeretlen indulás</span>
-          <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 448 512" className="mx-2 inline w-3 h-3">
-            <path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"></path>
-          </svg>
-          <span className="font-semibold">{trainDetails?.destination?.name || train.destination?.name || 'Ismeretlen cél'}</span>
+        {/* Status information grid */}
+        <div className="grid grid-cols-2 gap-3 mt-4">
+          <div className="flex items-center gap-2">
+            <Gauge className="w-4 h-4 text-blue-500" />
+            <div>
+              <div className="text-xs text-gray-500">Sebesség</div>
+              <div className="font-semibold text-gray-900">{Math.round(train.speed)} km/h</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-blue-500" />
+            <div>
+              <div className="text-xs text-gray-500">Késés</div>
+              <div className={`font-semibold ${
+                (trainDetails?.delay ?? train.delay) > 0 
+                  ? 'text-red-600' 
+                  : 'text-green-600'
+              }`}>
+                {getDelayText(trainDetails?.delay ?? train.delay)}
+              </div>
+            </div>
+          </div>
+          {train.uicInfo && (
+            <div className="col-span-2 flex items-center gap-2">
+              <Settings className="w-4 h-4 text-blue-500" />
+              <div>
+                <div className="text-xs text-gray-500">UIC kód</div>
+                <div className="font-mono text-sm font-semibold text-gray-900">
+                  {train.uicInfo.rawUIC?.replace(/(.{2})(.{2})(.{4})(.+)/, '$1 $2 $3 $4')}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Locomotive Information Section */}
       {train.locomotiveType && (
-        <div className="bg-blue-50 px-4 py-3 border-b">
-          <div className="flex flex-wrap gap-1">
-            <span className="text-black px-2 py-1 text-lg select-none bg-white rounded border border-gray-200 hover:bg-gray-50 font-mono">
-              {getTrainTypeEmoji(train.locomotiveType)}
-            </span>
-            <span className="text-black px-2 py-1 text-sm select-none bg-white rounded border border-gray-200 hover:bg-gray-50">
-              {train.locomotiveType.name}
-              {train.locomotiveType.nickname && ` "${train.locomotiveType.nickname}"`}
-            </span>
-            <span className="text-black px-2 py-1 text-sm select-none bg-white rounded border border-gray-200 hover:bg-gray-50">
-              {train.locomotiveType.manufacturer}
-            </span>
-            <span className="text-black px-2 py-1 text-sm select-none bg-white rounded border border-gray-200 hover:bg-gray-50">
-              {train.locomotiveType.yearIntroduced}
-              {train.locomotiveType.modernized && ` (${train.locomotiveType.modernized})`}
-            </span>
-            <span className={`px-2 py-1 text-sm cursor-pointer rounded border transition-all duration-200 flex items-center gap-1 ${
-              train.locomotiveType.hasAirConditioning 
-                ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600 hover:shadow-md' 
-                : 'bg-red-500 text-white border-red-600 hover:bg-red-600 hover:shadow-md'
-            }`}>
-              <Thermometer className="w-3 h-3" />
-              <span className="font-semibold">{train.locomotiveType.hasAirConditioning ? 'AC' : 'Nincs AC'}</span>
-            </span>
-            <span className="px-2 py-1 text-sm select-none bg-yellow-100 text-yellow-800 rounded border border-yellow-200">
-              {getReliabilityStars(train.locomotiveType.reliabilityRating)}
-            </span>
+        <div className="bg-gray-50 px-4 py-4 border-b">
+          <div className="mb-2">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">Mozgóállomány információ</h3>
+          </div>
+          <div className="space-y-2">
+            {/* Train type and name */}
+            <div className="flex items-center gap-2">
+              <span 
+                className="text-2xl mnr-font cursor-help" 
+                title={TRAIN_TYPE_DESCRIPTIONS[train.locomotiveType.uicCode] || train.locomotiveType.fullName}
+              >
+                {getTrainTypeEmoji(train.locomotiveType)}
+              </span>
+              <div>
+                <div className="font-semibold text-gray-900">
+                  {train.locomotiveType.name}
+                  {train.locomotiveType.nickname && (
+                    <span className="text-gray-600 font-normal ml-1">
+                      &ldquo;{train.locomotiveType.nickname}&rdquo;
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm text-gray-600">
+                  {train.locomotiveType.manufacturer} • {train.locomotiveType.yearIntroduced}
+                  {train.locomotiveType.modernized && ` (felújítva: ${train.locomotiveType.modernized})`}
+                </div>
+              </div>
+            </div>
+            
+            {/* Features */}
+            <div className="flex flex-wrap gap-2 mt-3">
+              <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-sm font-medium ${
+                train.locomotiveType.hasAirConditioning 
+                  ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                  : 'bg-gray-100 text-gray-600 border border-gray-200'
+              }`}>
+                <Thermometer className="w-3 h-3" />
+                {train.locomotiveType.hasAirConditioning ? 'Klimatizált' : 'Nincs klíma'}
+              </div>
+              
+              {train.locomotiveType.maxSpeed && (
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 border border-green-200">
+                  <Gauge className="w-3 h-3" />
+                  Max: {train.locomotiveType.maxSpeed} km/h
+                </div>
+              )}
+              
+              <div className="flex items-center gap-1 px-2 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+                <span>Megbízhatóság:</span>
+                <span>{getReliabilityStars(train.locomotiveType.reliabilityRating)}</span>
+              </div>
+            </div>
+            
+            {/* Comfort description */}
+            <div className="text-sm text-gray-600 mt-2">
+              <span className="font-medium">Komfort:</span> {getComfortDescription(train.locomotiveType)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Service Features Section */}
+      {(train.infoServices || trainDetails?.infoServices) && (
+        <div className="bg-gray-50 px-4 py-4 border-b">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Szolgáltatások</h3>
+          <div className="flex flex-wrap gap-2">
+            {(trainDetails?.infoServices || train.infoServices || []).map((service, index) => {
+              const serviceChar = getMNRServiceCharacter(service.fontCode);
+              const serviceDesc = getServiceDescription(service.fontCode);
+              
+              if (!serviceChar || !serviceDesc) return null;
+              
+              return (
+                <div 
+                  key={index}
+                  className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-200 rounded-full text-sm hover:bg-blue-50 hover:border-blue-200 transition-colors cursor-help"
+                  title={serviceDesc}
+                >
+                  <span className="mnr-font text-blue-600 font-medium text-base">
+                    {serviceChar}
+                  </span>
+                  <span className="text-gray-700 text-xs font-medium">
+                    {serviceDesc}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -565,7 +565,7 @@ class MavApiClient {
             var _a, _b, _c;
             const trip = vehicle.trip || {};
             const trainNumber = trip.tripShortName || vehicle.vehicleId || 'Unknown';
-            // Debug first few vehicles to check coordinates
+            // Debug first few vehicles to check coordinates and vehicleId
             if (index < 5) {
                 console.log(`🚂 Raw vehicle ${index}:`, {
                     trainNumber,
@@ -573,11 +573,18 @@ class MavApiClient {
                     rawLng: vehicle.lon,
                     trip: trip.tripHeadsign,
                     gtfsId: trip.gtfsId,
-                    trainName: trip.trainName
+                    trainName: trip.trainName,
+                    vehicleId: vehicle.vehicleId,
+                    fullVehicle: vehicle
                 });
             }
             // Parse UIC code for locomotive/EMU identification
-            const uicInfo = vehicle.vehicleId ? (0, uicParser_1.parseUIC)(vehicle.vehicleId) : undefined;
+            let uicInfo = vehicle.vehicleId ? (0, uicParser_1.parseUIC)(vehicle.vehicleId) : undefined;
+            // TEMPORARY: Add test locomotive data for demo purposes
+            if (!(uicInfo === null || uicInfo === void 0 ? void 0 : uicInfo.trainType) && index < 3) {
+                console.log('🔧 Adding test locomotive data for demo...');
+                uicInfo = (0, uicParser_1.parseUIC)('1:915504310018'); // Test V43 locomotive
+            }
             // Debug UIC parsing for first few vehicles
             if (index < 3 && uicInfo) {
                 console.log(`🔍 UIC Parsing for ${trainNumber}:`, {

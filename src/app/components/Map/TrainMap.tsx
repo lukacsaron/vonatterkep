@@ -15,11 +15,8 @@ import { getDelayCategory, getDelayColor } from '@/lib/utils';
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Set Mapbox access token - hardcoded based on environment
-const isDev = process.env.NODE_ENV === 'development';
-const MAPBOX_TOKEN = isDev 
-  ? 'pk.eyJ1IjoiYXJvbmx1a2FjcyIsImEiOiJjbWNmY3dzYTEwODJsMm1xeDRjcWlqNDM1In0.dp1ZMJivifhXprb0bzprTQ' // dev token
-  : 'pk.eyJ1IjoiYXJvbmx1a2FjcyIsImEiOiJjbWM4eTZyOXAweW5uMmtzM3hmanhtNzlxIn0.iZgLUL05MUWcOI_03e1EFA'; // production/staging token
+// Set Mapbox access token from environment variable
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
 if (MAPBOX_TOKEN) {
   mapboxgl.accessToken = MAPBOX_TOKEN;

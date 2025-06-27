@@ -28,8 +28,10 @@ const trainDatabase_1 = require("./trainDatabase");
 function parseUIC(vehicleId) {
     // Extract UIC code from EMMA format "1:915504310018" -> "915504310018"
     const rawUIC = vehicleId.includes(':') ? vehicleId.split(':')[1] : vehicleId;
+    console.log(`🔍 UIC Parser input: "${vehicleId}" -> raw: "${rawUIC}"`);
     // Validate UIC length (should be 12 digits for Hungarian rolling stock)
     if (!rawUIC || rawUIC.length < 8) {
+        console.log(`❌ UIC validation failed: length ${(rawUIC === null || rawUIC === void 0 ? void 0 : rawUIC.length) || 0}, expected >=8`);
         return {
             vehicleType: 'unknown',
             propulsion: null,
@@ -43,6 +45,7 @@ function parseUIC(vehicleId) {
     const vehicleTypeCode = rawUIC.substring(0, 2);
     const countryCode = rawUIC.substring(2, 4);
     const typeCode = rawUIC.substring(4, 8);
+    console.log(`🔍 UIC components: type=${vehicleTypeCode}, country=${countryCode}, typeCode=${typeCode}`);
     // Determine vehicle type and propulsion from first two digits
     let vehicleType = 'unknown';
     let propulsion = null;
@@ -139,9 +142,16 @@ function getComfortDescription(trainType) {
     return features.join(' • ');
 }
 /**
- * Get appropriate emoji for train type
+ * Get appropriate icon for train type (MNR2007 font character or emoji fallback)
  */
 function getTrainTypeEmoji(trainType) {
+    // First try to get MNR2007 font character
+    const { getMNRCharacter } = require('./mnrFont');
+    const mnrChar = getMNRCharacter(trainType.uicCode);
+    if (mnrChar) {
+        return mnrChar;
+    }
+    // Fallback to emoji
     switch (trainType.category) {
         case 'emu':
             return '🚄'; // High-speed train for modern EMUs

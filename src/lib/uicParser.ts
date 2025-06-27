@@ -154,9 +154,18 @@ export function getComfortDescription(trainType: TrainType): string {
 }
 
 /**
- * Get appropriate emoji for train type
+ * Get appropriate icon for train type (MNR2007 font character or emoji fallback)
  */
 export function getTrainTypeEmoji(trainType: TrainType): string {
+  // First try to get MNR2007 font character
+  const { getMNRCharacter } = require('./mnrFont');
+  const mnrChar = getMNRCharacter(trainType.uicCode);
+  
+  if (mnrChar) {
+    return mnrChar;
+  }
+  
+  // Fallback to emoji
   switch (trainType.category) {
     case 'emu':
       return '🚄'; // High-speed train for modern EMUs

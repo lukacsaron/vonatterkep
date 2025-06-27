@@ -11,6 +11,12 @@ export interface Station {
   services?: string[];
 }
 
+export interface InfoService {
+  fontCode: number;
+  fontCharSet: string;  // e.g., "MNR2007"
+  description?: string;
+}
+
 export interface Train {
   id: string;
   number: string;
@@ -31,6 +37,8 @@ export interface Train {
   // UIC locomotive type detection
   locomotiveType?: import('./trainTypes').TrainType;  // Detected locomotive/EMU type
   uicInfo?: import('./trainTypes').UICParseResult;    // Raw UIC parsing result
+  // EMMA API service features
+  infoServices?: InfoService[];  // Service icons from EMMA API
 }
 
 export interface TrainStop {
