@@ -11,7 +11,7 @@ exports.getTrainDescription = getTrainDescription;
 exports.getComfortDescription = getComfortDescription;
 exports.getTrainTypeEmoji = getTrainTypeEmoji;
 exports.getReliabilityStars = getReliabilityStars;
-const trainTypes_1 = require("@/types/trainTypes");
+const trainTypes_1 = require("../types/trainTypes");
 const trainDatabase_1 = require("./trainDatabase");
 /**
  * Parse UIC vehicle code from EMMA API vehicle ID

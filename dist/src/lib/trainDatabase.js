@@ -11,7 +11,7 @@ exports.getTrainTypeByUIC = getTrainTypeByUIC;
 exports.getTrainTypesByCategory = getTrainTypesByCategory;
 exports.getModernTrains = getModernTrains;
 exports.searchTrainTypes = searchTrainTypes;
-const trainTypes_1 = require("@/types/trainTypes");
+const trainTypes_1 = require("../types/trainTypes");
 exports.HUNGARIAN_TRAIN_TYPES = {
     // ===== ELECTRIC LOCOMOTIVES =====
     // V43 Series - The workhorses of Hungarian railways

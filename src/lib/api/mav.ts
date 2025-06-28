@@ -1,5 +1,5 @@
 // MÁV API integration based on reference implementations
-import { TrainDetails, TrainStop } from '@/types';
+import { TrainDetails, TrainStop } from '../../types';
 import { parseUIC } from '../uicParser';
 
 // Constants from reference implementations

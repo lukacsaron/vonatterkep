@@ -5,7 +5,7 @@
  * Handles EMMA API format: "1:915504310018" -> "915504310018"
  */
 
-import { UICParseResult, PropulsionType, TrainType } from '@/types/trainTypes';
+import { UICParseResult, PropulsionType, TrainType } from '../types/trainTypes';
 import { getTrainTypeByUIC } from './trainDatabase';
 
 /**

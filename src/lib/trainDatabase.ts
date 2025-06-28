@@ -5,7 +5,7 @@
  * Sources: Reddit r/hungary discussion, MÁV specifications, railway enthusiasts
  */
 
-import { TrainType, TrainCategory, PropulsionType, ComfortLevel } from '@/types/trainTypes';
+import { TrainType, TrainCategory, PropulsionType, ComfortLevel } from '../types/trainTypes';
 
 export const HUNGARIAN_TRAIN_TYPES: Record<string, TrainType> = {
   // ===== ELECTRIC LOCOMOTIVES =====
