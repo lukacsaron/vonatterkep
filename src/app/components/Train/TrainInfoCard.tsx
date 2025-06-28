@@ -337,7 +337,7 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
                               <span className={isPassed ? 'line-through' : ''}>
                                 {formatTime(new Date(stop.arrival))}
                               </span>
-                              {stop.actualArrival && (
+                              {stop.actualArrival && formatTime(new Date(stop.actualArrival)) !== formatTime(new Date(stop.arrival)) && (
                                 <span className={stop.delay && stop.delay > 0 ? 'text-red-600 text-xs' : 'text-green-600 text-xs'}>
                                   {formatTime(new Date(stop.actualArrival))}
                                 </span>
@@ -353,7 +353,7 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
                               <span className={isPassed ? 'line-through' : ''}>
                                 {formatTime(new Date(stop.departure))}
                               </span>
-                              {stop.actualDeparture && (
+                              {stop.actualDeparture && formatTime(new Date(stop.actualDeparture)) !== formatTime(new Date(stop.departure)) && (
                                 <span className={stop.delay && stop.delay > 0 ? 'text-red-600 text-xs' : 'text-green-600 text-xs'}>
                                   {formatTime(new Date(stop.actualDeparture))}
                                 </span>
