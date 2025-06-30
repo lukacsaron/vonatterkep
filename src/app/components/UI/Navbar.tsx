@@ -2,10 +2,35 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Train, Map, Search, Menu, X, User } from 'lucide-react';
+import { Train, Map, Search, Menu, X, User, Coffee, Heart } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useSearch } from '@/app/components/Search/GlobalSearchProvider';
+
+function BuyMeCoffeeButton() {
+  return (
+    <a 
+      href="https://www.buymeacoffee.com/aron.lukacs" 
+      target="_blank" 
+      rel="noopener noreferrer"
+      className="group inline-flex items-center bg-[#FFDD00] hover:bg-[#FFD700] active:bg-[#FFCC00] rounded-lg px-3 py-2 transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg"
+    >
+      {/* Coffee icon */}
+      <Coffee className="h-4 w-4 text-black mr-2 group-hover:scale-110 transition-transform duration-200" />
+      
+      {/* Text */}
+      <span className="text-black font-semibold text-sm whitespace-nowrap">
+        Szállj be egy kávéval! :)
+      </span>
+      
+      {/* Heart with number */}
+      <div className="ml-3 flex items-center bg-black bg-opacity-20 rounded px-2 py-1">
+        <Heart className="h-3 w-3 text-white mr-1 fill-white group-hover:scale-110 transition-transform duration-200" />
+        <span className="text-white text-xs font-semibold">15</span>
+      </div>
+    </a>
+  );
+}
 
 type NavItem = {
   href: string;
@@ -114,18 +139,7 @@ export function Navbar() {
               </Link>
               
               {/* Buy Me a Coffee button */}
-              <a 
-                href="https://www.buymeacoffee.com/aron.lukacs" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center"
-              >
-                <img 
-                  src="https://img.buymeacoffee.com/button-api/?text=Vegyél nekem egy kávét&emoji=&slug=aron.lukacs&button_colour=FFDD00&font_colour=000000&font_family=Poppins&outline_colour=000000&coffee_colour=ffffff" 
-                  alt="Buy Me a Coffee"
-                  className="h-9"
-                />
-              </a>
+              <BuyMeCoffeeButton />            
             </div>
             
             {/* Mobile menu button */}
@@ -202,19 +216,9 @@ export function Navbar() {
           </Link>
           
           {/* Buy Me a Coffee - Mobile */}
-          <a 
-            href="https://www.buymeacoffee.com/aron.lukacs" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="flex items-center px-3 py-2"
-          >
-            <img 
-              src="https://img.buymeacoffee.com/button-api/?text=Vegyél nekem egy kávét&emoji=&slug=aron.lukacs&button_colour=FFDD00&font_colour=000000&font_family=Poppins&outline_colour=000000&coffee_colour=ffffff" 
-              alt="Buy Me a Coffee"
-              className="h-10"
-            />
-          </a>
-        </div>
+          <div className="px-3 py-2">
+            <BuyMeCoffeeButton />
+          </div>              </div>
       </div>
     </nav>
   );

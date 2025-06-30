@@ -17,7 +17,7 @@ export function DelayLegend() {
             className="w-4 h-4 rounded-sm" 
             style={{ backgroundColor: '#eab308' }}
           ></div>
-          <span>5-14 perc késés</span>
+          <span>5-19 perc késés</span>
         </div>
         
         <div className="flex items-center gap-2">
@@ -25,7 +25,7 @@ export function DelayLegend() {
             className="w-4 h-4 rounded-sm" 
             style={{ backgroundColor: '#f97316' }}
           ></div>
-          <span>15-59 perc késés</span>
+          <span>20-59 perc késés</span>
         </div>
         
         <div className="flex items-center gap-2">

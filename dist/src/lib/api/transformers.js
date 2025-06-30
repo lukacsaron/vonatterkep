@@ -41,7 +41,10 @@ function transformMavTrain(mavTrain) {
         gtfsId: mavTrain.gtfsId,
         trainName: mavTrain.trainName,
         lastUpdate: ((_e = mavTrain.UtolsoGPS) === null || _e === void 0 ? void 0 : _e.Ido) ? new Date(mavTrain.UtolsoGPS.Ido) : new Date(),
-        isMoving: (((_f = mavTrain.UtolsoGPS) === null || _f === void 0 ? void 0 : _f.Sebesseg) || 0) > 5 // Consider moving if speed > 5 km/h
+        isMoving: (((_f = mavTrain.UtolsoGPS) === null || _f === void 0 ? void 0 : _f.Sebesseg) || 0) > 5, // Consider moving if speed > 5 km/h
+        // UIC locomotive type detection
+        locomotiveType: mavTrain.locomotiveType,
+        uicInfo: mavTrain.uicInfo
     };
     // Debug coordinate transformation
     if (mavTrain.VonatSzam && mavTrain.VonatSzam.includes('863')) {
@@ -190,7 +193,7 @@ function getDepartureStatus(mavDeparture) {
     if (departureTime < now) {
         return types_1.DepartureStatus.DEPARTED;
     }
-    if (delay > 30) {
+    if (delay >= 20) {
         return types_1.DepartureStatus.DELAYED;
     }
     return types_1.DepartureStatus.ON_TIME;
@@ -202,7 +205,7 @@ function getArrivalStatus(mavArrival) {
     if (arrivalTime < now) {
         return types_1.DepartureStatus.DEPARTED; // Use DEPARTED to indicate "ARRIVED"
     }
-    if (delay > 30) {
+    if (delay >= 20) {
         return types_1.DepartureStatus.DELAYED;
     }
     return types_1.DepartureStatus.ON_TIME;

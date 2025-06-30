@@ -15,9 +15,8 @@ import { getDelayCategory, getDelayColor } from '@/lib/utils';
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Set Mapbox access token (hardcoded)
-const MAPBOX_TOKEN = 'pk.eyJ1IjoiYXJvbmx1a2FjcyIsImEiOiJjbWM4eTZyOXAweW5uMmtzM3hmanhtNzlxIn0.iZgLUL05MUWcOI_03e1EFA';
-mapboxgl.accessToken = MAPBOX_TOKEN;
+// Set Mapbox access token - hardcoded for simplicity
+mapboxgl.accessToken = 'pk.eyJ1IjoiYXJvbmx1a2FjcyIsImEiOiJjbWNmY3dzYTEwODJsMm1xeDRjcWlqNDM1In0.dp1ZMJivifhXprb0bzprTQ';
 
 function TrainMapComponent() {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -36,7 +35,6 @@ function TrainMapComponent() {
   const [isInitialLocationSet, setIsInitialLocationSet] = useState(false);
 
   console.log('TrainMap render:', { 
-    hasToken: !!MAPBOX_TOKEN, 
     mapReady, 
     trainsCount: trains?.length,
     mapError,
@@ -48,7 +46,7 @@ function TrainMapComponent() {
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
-    console.log('Initializing map with token:', !!MAPBOX_TOKEN);
+    console.log('Initializing map...');
 
     try {
       // Initialize map centered on Hungary
@@ -278,7 +276,7 @@ function TrainMapComponent() {
         },
         paint: {
           'text-color': ['get', 'color'],
-          'text-halo-color': '#ffffff',
+          'text-halo-color': '#374151',
           'text-halo-width': 1.25
         }
       });
@@ -292,7 +290,7 @@ function TrainMapComponent() {
           'circle-radius': 8, // Covers triangle base, lets tip extend
           'circle-color': ['get', 'color'],
           'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff'
+          'circle-stroke-color': '#374151'
         }
       });
 
@@ -338,13 +336,13 @@ function TrainMapComponent() {
       const avgLng = allLngs.reduce((a, b) => a + b, 0) / allLngs.length;
       console.log('  Average coords:', { lat: avgLat, lng: avgLng });
       
-      // Debug delay distribution
+      // Debug delay distribution (aligned with main delay categories)
       const delays = features.map(f => f.properties.delay);
       const delayBuckets = {
-        onTime: delays.filter(d => d < 5).length,
-        minor: delays.filter(d => d >= 5 && d < 15).length,
-        moderate: delays.filter(d => d >= 15 && d < 30).length,
-        severe: delays.filter(d => d >= 30).length
+        onTime: delays.filter(d => d <= 4).length,        // 0-4 perc késés
+        minor: delays.filter(d => d >= 5 && d <= 19).length,      // 5-19 perc késés
+        moderate: delays.filter(d => d >= 20 && d <= 59).length,  // 20-59 perc késés
+        severe: delays.filter(d => d >= 60).length                // 60+ perc késés
       };
       console.log('  Delay distribution:', delayBuckets);
       console.log('  Sample delays:', delays.slice(0, 10));
@@ -534,17 +532,6 @@ function TrainMapComponent() {
     return el;
   }, []); // No dependencies needed since it only uses pure DOM operations
 
-  if (!mapboxgl.accessToken) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-100">
-        <div className="text-center">
-          <p className="text-gray-600 mb-2">A térkép nem tölthető be</p>
-          <p className="text-sm text-gray-500">Állítsd be a NEXT_PUBLIC_MAPBOX_TOKEN-t</p>
-          <p className="text-xs text-gray-400 mt-2">Token találva: {!!MAPBOX_TOKEN ? 'Igen' : 'Nem'}</p>
-        </div>
-      </div>
-    );
-  }
 
   if (mapError) {
     return (

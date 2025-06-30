@@ -7,7 +7,7 @@ const { createClient } = require('redis');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
-const port = parseInt(process.env.PORT, 10) || 3000;
+const port = parseInt(process.env.PORT, 10) || 3001;
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();

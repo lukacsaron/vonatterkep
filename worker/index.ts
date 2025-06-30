@@ -23,6 +23,17 @@ async function runFetchCycle() {
     const trains: Train[] = mavTrains
       .filter(train => train.UtolsoGPS)
       .map(transformMavTrain);
+    
+    // Debug locomotive detection in worker
+    const trainsWithLocomotive = trains.filter(t => t.locomotiveType);
+    console.log(`🚂 Worker: ${trainsWithLocomotive.length}/${trains.length} trains have locomotive detection`);
+    if (trainsWithLocomotive.length > 0) {
+      console.log('🔍 Sample locomotives detected:', trainsWithLocomotive.slice(0, 3).map(t => ({
+        number: t.number,
+        type: t.locomotiveType?.name,
+        uic: t.uicInfo?.rawUIC
+      })));
+    }
       
     if (trains.length === 0) {
         console.warn('MÁV API returned 0 trains. Cache will not be updated.');

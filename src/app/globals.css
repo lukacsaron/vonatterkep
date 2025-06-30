@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* MNR2007 Font - Hungarian Railway iconographic font */
+@font-face {
+  font-family: 'MNR2007';
+  src: url('/fonts/mnr2007.ttf') format('truetype');
+  font-display: optional;
+  font-weight: normal;
+  font-style: normal;
+}
+
+.mnr-font {
+  font-family: 'MNR2007', 'Courier New', monospace;
+}
+
 /* Custom styles for the app */
 body {
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;

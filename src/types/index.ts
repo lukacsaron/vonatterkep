@@ -11,6 +11,12 @@ export interface Station {
   services?: string[];
 }
 
+export interface InfoService {
+  fontCode: number;
+  fontCharSet: string;  // e.g., "MNR2007"
+  description?: string;
+}
+
 export interface Train {
   id: string;
   number: string;
@@ -28,6 +34,11 @@ export interface Train {
   trainName?: string;     // Route name like "S60"
   lastUpdate?: Date;      // When position was last updated
   isMoving?: boolean;     // Whether train is currently moving
+  // UIC locomotive type detection
+  locomotiveType?: import('./trainTypes').TrainType;  // Detected locomotive/EMU type
+  uicInfo?: import('./trainTypes').UICParseResult;    // Raw UIC parsing result
+  // EMMA API service features
+  infoServices?: InfoService[];  // Service icons from EMMA API
 }
 
 export interface TrainStop {
@@ -135,8 +146,8 @@ export enum DepartureStatus {
 
 export enum DelayCategory {
   ON_TIME = 'ON_TIME',     // 0-4 perc késés (green)
-  MINOR = 'MINOR',         // 5-14 perc késés (yellow)
-  MODERATE = 'MODERATE',   // 15-59 perc késés (orange)
+  MINOR = 'MINOR',         // 5-19 perc késés (yellow)
+  MODERATE = 'MODERATE',   // 20-59 perc késés (orange)
   SEVERE = 'SEVERE',       // 60+ perc késés (red)
 }
 
