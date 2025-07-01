@@ -136,7 +136,7 @@ export function TrainInfoModal({ train, onClose }: TrainInfoModalProps) {
           }}
           onTouchStart={handleTouchStart}
         >
-          <TrainInfoCard train={train} onClose={handleClose} />
+          <TrainInfoCard train={train} onClose={handleClose} disableClickOutside={true} />
         </div>
         
         {/* Desktop: Side modal */}
@@ -145,7 +145,7 @@ export function TrainInfoModal({ train, onClose }: TrainInfoModalProps) {
             isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
           }`}
         >
-          <TrainInfoCard train={train} onClose={handleClose} />
+          <TrainInfoCard train={train} onClose={handleClose} disableClickOutside={true} />
         </div>
       </div>
     </div>

@@ -19,6 +19,7 @@ import {
 interface TrainInfoCardProps {
   train: Train;
   onClose?: () => void;
+  disableClickOutside?: boolean;
 }
 
 interface LocomotiveInfoSectionProps {
@@ -31,7 +32,10 @@ function LocomotiveInfoSection({ locomotiveType }: LocomotiveInfoSectionProps) {
   return (
     <div className="bg-gray-50 border-b flex-shrink-0">
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsExpanded(!isExpanded);
+        }}
         className="w-full px-4 md:px-4 py-4 md:py-3 flex items-center justify-between text-left hover:bg-gray-100 transition-colors min-h-[56px] md:min-h-auto"
       >
         <h3 className="text-base md:text-sm font-semibold text-gray-700">Mozgóállomány információ</h3>
@@ -102,7 +106,7 @@ function LocomotiveInfoSection({ locomotiveType }: LocomotiveInfoSectionProps) {
   );
 }
 
-export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
+export function TrainInfoCard({ train, onClose, disableClickOutside = false }: TrainInfoCardProps) {
   const [trainDetails, setTrainDetails] = useState<Train | null>(null);
   const [loading, setLoading] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -196,8 +200,10 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
     return codeMatch ? `[${codeMatch[1]}]` : '';
   };
 
-  // Handle click outside to close
+  // Handle click outside to close (only when not disabled)
   useEffect(() => {
+    if (!onClose || disableClickOutside) return;
+    
     const handleClickOutside = (event: MouseEvent) => {
       if (cardRef.current && !cardRef.current.contains(event.target as Node) && onClose) {
         onClose();
@@ -208,7 +214,7 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [onClose]);
+  }, [onClose, disableClickOutside]);
 
   return (
     <div 
