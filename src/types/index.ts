@@ -27,7 +27,8 @@ export interface Train {
   delay: number;  // in minutes, from real-time API
   nextStation?: Station;
   previousStation?: Station;
-  destination?: Station;
+  origin?: Station;       // Starting station from route data
+  destination?: Station;  // Final destination from route data
   route?: Stop[];
   // Enhanced fields for better popup info
   gtfsId?: string;        // For delay lookup

@@ -65,20 +65,56 @@ export function useTrainSearch(query: string) {
       if (train.destination?.name) {
         const destination = train.destination.name.toLowerCase();
         if (destination.includes(debouncedQuery)) {
+          const originName = train.origin?.name || 'Unknown origin';
           relevanceScores.push({
             score: 60,
             type: 'route',
             matchedText: `To ${train.destination.name}`,
             route: {
-              from: 'Current location',
+              from: originName,
               to: train.destination.name
             }
           });
         }
       }
+      
+      // 3.1. Origin matching (new)
+      if (train.origin?.name) {
+        const origin = train.origin.name.toLowerCase();
+        if (origin.includes(debouncedQuery)) {
+          const destinationName = train.destination?.name || 'Unknown destination';
+          relevanceScores.push({
+            score: 60,
+            type: 'route',
+            matchedText: `From ${train.origin.name}`,
+            route: {
+              from: train.origin.name,
+              to: destinationName
+            }
+          });
+        }
+      }
 
-      // 4. Route search (if train has route data)
-      if (train.route && train.route.length > 0) {
+      // 4. Route search - prioritize origin/destination, fallback to route data
+      const originName = train.origin?.name;
+      const destinationName = train.destination?.name;
+      
+      if (originName && destinationName) {
+        // Use the new origin/destination fields
+        const routeText = `${originName} → ${destinationName}`.toLowerCase();
+        if (routeText.includes(debouncedQuery)) {
+          relevanceScores.push({
+            score: 55,
+            type: 'route',
+            matchedText: `${originName} → ${destinationName}`,
+            route: {
+              from: originName,
+              to: destinationName
+            }
+          });
+        }
+      } else if (train.route && train.route.length > 0) {
+        // Fallback to detailed route data
         const routeStations = train.route.map(stop => stop.station.name.toLowerCase());
         const matchingStations = routeStations.filter(station => station.includes(debouncedQuery));
         

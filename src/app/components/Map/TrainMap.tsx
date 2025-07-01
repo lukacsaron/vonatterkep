@@ -5,7 +5,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useMapStore, useLocationStore } from '@/lib/store';
 import { useTrains } from '@/lib/hooks/useTrains';
-import { TrainInfoCard } from '../Train/TrainInfoCard';
+import { TrainInfoModal } from '../Train/TrainInfoModal';
 import { LoadingSpinner } from '../UI/LoadingSpinner';
 import { DelayLegend } from '../UI/DelayLegend';
 import { LocationButton } from '../UI/LocationButton';
@@ -549,14 +549,10 @@ function TrainMapComponent() {
       <div ref={mapContainer} className="w-full h-full" />
       
       {/* Train info popup */}
-      {selectedTrain && (
-        <div className="absolute top-4 right-4 z-50">
-          <TrainInfoCard 
-            train={selectedTrain} 
-            onClose={() => setSelectedTrain(null)} 
-          />
-        </div>
-      )}
+      <TrainInfoModal 
+        train={selectedTrain} 
+        onClose={() => setSelectedTrain(null)} 
+      />
 
 
       {/* Delay Legend */}

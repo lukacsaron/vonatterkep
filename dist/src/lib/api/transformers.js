@@ -19,29 +19,66 @@ function transformMavStation(mavStation) {
         services: [] // Would need additional API call for services
     };
 }
-function transformMavTrain(mavTrain) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+function transformMavTrain(mavTrain, trainDetails) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    // Extract origin and destination from route details if available
+    let origin;
+    let destination;
+    // Debug route data availability (only for selected trains)
+    if (mavTrain.VonatSzam && mavTrain.VonatSzam.includes('DEBUG_TRAIN_PLACEHOLDER')) {
+        if (trainDetails) {
+            console.log(`🔍 Transformer: Train ${mavTrain.VonatSzam} has trainDetails with ${((_a = trainDetails.stops) === null || _a === void 0 ? void 0 : _a.length) || 0} stops`);
+        }
+        else {
+            console.log(`⚠️ Transformer: Train ${mavTrain.VonatSzam} has NO trainDetails`);
+        }
+    }
+    if (trainDetails && trainDetails.stops && trainDetails.stops.length > 0) {
+        // Get origin from first stop
+        const firstStop = trainDetails.stops[0];
+        origin = {
+            id: 'unknown',
+            name: firstStop.name,
+            coordinates: { latitude: 0, longitude: 0 }
+        };
+        // Get destination from last stop
+        const lastStop = trainDetails.stops[trainDetails.stops.length - 1];
+        destination = {
+            id: 'unknown',
+            name: lastStop.name,
+            coordinates: { latitude: 0, longitude: 0 }
+        };
+        // Only log for debugging specific trains
+        if (mavTrain.VonatSzam && mavTrain.VonatSzam.includes('DEBUG_TRAIN_PLACEHOLDER')) {
+            console.log(`✅ Transformer: Set origin/destination for ${mavTrain.VonatSzam}: ${origin.name} -> ${destination.name}`);
+        }
+    }
+    else {
+        // Fallback to existing logic if no route details
+        destination = mavTrain.Celallomas ? {
+            id: 'unknown',
+            name: mavTrain.Celallomas,
+            coordinates: { latitude: 0, longitude: 0 }
+        } : undefined;
+    }
     const train = {
         id: mavTrain.VonatSzam,
         number: mavTrain.VonatSzam,
         type: mapMavTrainType(mavTrain.Tipus),
         position: {
-            latitude: ((_a = mavTrain.UtolsoGPS) === null || _a === void 0 ? void 0 : _a.Lat) || 0,
-            longitude: ((_b = mavTrain.UtolsoGPS) === null || _b === void 0 ? void 0 : _b.Lng) || 0
+            latitude: ((_b = mavTrain.UtolsoGPS) === null || _b === void 0 ? void 0 : _b.Lat) || 0,
+            longitude: ((_c = mavTrain.UtolsoGPS) === null || _c === void 0 ? void 0 : _c.Lng) || 0
         },
-        speed: ((_c = mavTrain.UtolsoGPS) === null || _c === void 0 ? void 0 : _c.Sebesseg) || 0,
-        heading: ((_d = mavTrain.UtolsoGPS) === null || _d === void 0 ? void 0 : _d.Irany) || 0,
+        speed: ((_d = mavTrain.UtolsoGPS) === null || _d === void 0 ? void 0 : _d.Sebesseg) || 0,
+        heading: ((_e = mavTrain.UtolsoGPS) === null || _e === void 0 ? void 0 : _e.Irany) || 0,
         delay: mavTrain.Keses || 0,
-        destination: mavTrain.Celallomas ? {
-            id: 'unknown',
-            name: mavTrain.Celallomas,
-            coordinates: { latitude: 0, longitude: 0 }
-        } : undefined,
+        origin,
+        destination,
         // Enhanced fields
         gtfsId: mavTrain.gtfsId,
-        trainName: mavTrain.trainName,
-        lastUpdate: ((_e = mavTrain.UtolsoGPS) === null || _e === void 0 ? void 0 : _e.Ido) ? new Date(mavTrain.UtolsoGPS.Ido) : new Date(),
-        isMoving: (((_f = mavTrain.UtolsoGPS) === null || _f === void 0 ? void 0 : _f.Sebesseg) || 0) > 5, // Consider moving if speed > 5 km/h
+        trainName: mavTrain.trainName || (trainDetails === null || trainDetails === void 0 ? void 0 : trainDetails.trainName),
+        lastUpdate: ((_f = mavTrain.UtolsoGPS) === null || _f === void 0 ? void 0 : _f.Ido) ? new Date(mavTrain.UtolsoGPS.Ido) : new Date(),
+        isMoving: (((_g = mavTrain.UtolsoGPS) === null || _g === void 0 ? void 0 : _g.Sebesseg) || 0) > 5, // Consider moving if speed > 5 km/h
         // UIC locomotive type detection
         locomotiveType: mavTrain.locomotiveType,
         uicInfo: mavTrain.uicInfo
@@ -49,10 +86,14 @@ function transformMavTrain(mavTrain) {
     // Debug coordinate transformation
     if (mavTrain.VonatSzam && mavTrain.VonatSzam.includes('863')) {
         console.log('🔄 Transforming train 863:', {
-            original: { lat: (_g = mavTrain.UtolsoGPS) === null || _g === void 0 ? void 0 : _g.Lat, lng: (_h = mavTrain.UtolsoGPS) === null || _h === void 0 ? void 0 : _h.Lng },
+            original: { lat: (_h = mavTrain.UtolsoGPS) === null || _h === void 0 ? void 0 : _h.Lat, lng: (_j = mavTrain.UtolsoGPS) === null || _j === void 0 ? void 0 : _j.Lng },
             transformed: { lat: train.position.latitude, lng: train.position.longitude },
             mapboxFormat: [train.position.longitude, train.position.latitude]
         });
+    }
+    // Log origin/destination extraction for debugging (only specific trains)
+    if (trainDetails && (origin || destination) && mavTrain.VonatSzam && mavTrain.VonatSzam.includes('DEBUG_TRAIN_PLACEHOLDER')) {
+        console.log(`🚂 Train ${mavTrain.VonatSzam} route: ${(origin === null || origin === void 0 ? void 0 : origin.name) || 'Unknown'} -> ${(destination === null || destination === void 0 ? void 0 : destination.name) || 'Unknown'}`);
     }
     return train;
 }

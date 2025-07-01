@@ -89,6 +89,13 @@ export default function RootLayout({
   return (
     <html lang="hu" suppressHydrationWarning>
       <head>
+        <link
+          rel="preload"
+          href="/fonts/mnr2007.ttf"
+          as="font"
+          type="font/ttf"
+          crossOrigin="anonymous"
+        />
         <Script
           id="gtm-script"
           strategy="afterInteractive"

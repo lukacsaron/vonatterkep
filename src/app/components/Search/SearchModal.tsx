@@ -224,10 +224,19 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                           <Train className="h-3 w-3" />
                           <span>{Math.round(result.train.speed)} km/h</span>
                         </div>
-                        {result.train.destination && (
+                        {(result.train.origin || result.train.destination) && (
                           <div className="flex items-center gap-1">
                             <MapPin className="h-3 w-3" />
-                            <span>To {result.train.destination.name}</span>
+                            <span>
+                              {result.train.origin?.name && result.train.destination?.name 
+                                ? `${result.train.origin.name} → ${result.train.destination.name}`
+                                : result.train.destination?.name 
+                                  ? `To ${result.train.destination.name}`
+                                  : result.train.origin?.name
+                                    ? `From ${result.train.origin.name}`
+                                    : ''
+                              }
+                            </span>
                           </div>
                         )}
                       </div>
