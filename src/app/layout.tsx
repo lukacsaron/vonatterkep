@@ -13,7 +13,7 @@ export const viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://vonatterkep.app.jazzrabbit.eu"),
+  metadataBase: new URL("https://vasutterkep.hu"),
   title: "VasútTérkép - Élő vasútkövetés Magyarországon",
   description: "Kövesd nyomon a magyar vonatokat élőben. Nézd meg a késéseket és tervezd meg az utazásod.",
   keywords: ["MÁV", "vonat", "vasút", "Magyarország", "követés", "útvonaltervező", "holavonat", "vonat térkép", "elvira", "emma", "vonatinfó", "menetrend"],
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     description: "Kövesd nyomon a magyar vonatokat élőben.",
     type: "website",
     locale: "hu_HU",
-    url: "https://vonatterkep.app.jazzrabbit.eu",
+    url: "https://vasutterkep.hu",
     siteName: "VasútTérkép",
     images: [
       {
@@ -96,6 +96,68 @@ export default function RootLayout({
           type="font/ttf"
           crossOrigin="anonymous"
         />
+        
+        {/* Structured Data for the entire website */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              "name": "VasútTérkép",
+              "alternateName": "Vonat Térkép",
+              "description": "Élő vonatkövetés és vasúti információs rendszer Magyarországon. Nézd meg élőben, hol járnak a MÁV vonatok.",
+              "url": "https://vasutterkep.hu",
+              "applicationCategory": "TransportationApplication",
+              "operatingSystem": "Web Browser",
+              "browserRequirements": "Requires JavaScript. Requires HTML5.",
+              "softwareVersion": "1.0",
+              "datePublished": "2024-12-01",
+              "dateModified": new Date().toISOString().split('T')[0],
+              "inLanguage": "hu-HU",
+              "isAccessibleForFree": true,
+              "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "HUF",
+                "availability": "https://schema.org/InStock"
+              },
+              "author": {
+                "@type": "Person",
+                "name": "Áron Lukács",
+                "url": "https://vasutterkep.hu/ki-vagyok"
+              },
+              "publisher": {
+                "@type": "Organization",
+                "name": "VasútTérkép",
+                "url": "https://vasutterkep.hu"
+              },
+              "mainEntity": {
+                "@type": "Service",
+                "name": "Magyar vonatkövetés",
+                "serviceType": "Transportation Information",
+                "provider": {
+                  "@type": "Organization",
+                  "name": "VasútTérkép"
+                },
+                "areaServed": {
+                  "@type": "Country",
+                  "name": "Hungary"
+                }
+              },
+              "featureList": [
+                "Élő vonatkövetés térképen",
+                "Valós idejű késési információk",
+                "Állomási menetrendek",
+                "Vonat keresés",
+                "Mobil-optimalizált felület",
+                "Ingyenes használat"
+              ],
+              "keywords": "MÁV, vonat, vasút, Magyarország, követés, térkép, menetrend, késés, élő, valós idő"
+            })
+          }}
+        />
+        
         <Script
           id="gtm-script"
           strategy="afterInteractive"

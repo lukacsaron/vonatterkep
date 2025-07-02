@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+
+# Allow crawling of main pages
+Allow: /mi-ez-itt
+Allow: /ki-vagyok
+Allow: /search
+Allow: /stations/
+
+# Disallow API routes and admin endpoints
+Disallow: /api/
+Disallow: /test-*
+Disallow: /*debug*
+Disallow: /admin/
+
+# Sitemap location
+Sitemap: https://vasutterkep.hu/sitemap.xml
+
+# Crawl delay (be respectful)
+Crawl-delay: 1

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Train, Map, Search, Menu, X, User, Coffee, Heart } from 'lucide-react';
+import { Train, Map, Search, Menu, X, User, Coffee, Heart, HelpCircle } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useSearch } from '@/app/components/Search/GlobalSearchProvider';
@@ -123,8 +123,20 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center">
-            {/* Ki vagyok? link - Desktop */}
+            {/* Info links - Desktop */}
             <div className="hidden sm:flex sm:items-center sm:space-x-2">
+              <Link
+                href="/mi-ez-itt"
+                className={cn(
+                  "inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                  pathname === '/mi-ez-itt'
+                    ? "text-blue-600 bg-blue-50"
+                    : "text-gray-700 hover:text-blue-600 hover:bg-gray-50"
+                )}
+              >
+                <HelpCircle className="h-4 w-4 mr-2" />
+                Mi ez itt?
+              </Link>
               <Link
                 href="/ki-vagyok"
                 className={cn(
@@ -200,12 +212,25 @@ export function Navbar() {
             );
           })}
           
-          {/* Ki vagyok? - Mobile */}
+          {/* Info links - Mobile */}
+          <Link
+            href="/mi-ez-itt"
+            onClick={() => setIsOpen(false)}
+            className={cn(
+              "flex items-center px-3 py-2 text-base font-medium border-t border-gray-200 mt-2 pt-4",
+              pathname === '/mi-ez-itt'
+                ? "text-blue-600 bg-blue-50"
+                : "text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+            )}
+          >
+            <HelpCircle className="h-5 w-5 mr-3" />
+            Mi ez itt?
+          </Link>
           <Link
             href="/ki-vagyok"
             onClick={() => setIsOpen(false)}
             className={cn(
-              "flex items-center px-3 py-2 text-base font-medium border-t border-gray-200 mt-2 pt-4",
+              "flex items-center px-3 py-2 text-base font-medium",
               pathname === '/ki-vagyok'
                 ? "text-blue-600 bg-blue-50"
                 : "text-gray-700 hover:text-gray-900 hover:bg-gray-50"
