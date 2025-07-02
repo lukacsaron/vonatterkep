@@ -41,6 +41,11 @@ export function TrainSearchResultItem({ train, className }: TrainSearchResultIte
     speed: 0, // Not available in search results
     heading: 0, // Not available in search results
     delay: train.liveDelayMinutes || 0,
+    origin: {
+      id: '',
+      name: train.origin.name,
+      coordinates: { latitude: 0, longitude: 0 }
+    },
     destination: {
       id: '',
       name: train.destination.name,

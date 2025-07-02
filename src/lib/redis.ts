@@ -15,6 +15,7 @@ const redisClient = redisUrl ? createClient({
   hGetAll: async () => Promise.resolve({} as Record<string, string>),
   hKeys: async () => Promise.resolve([]),
   hDel: async () => Promise.resolve(0),
+  expire: async () => Promise.resolve(1), // Add missing expire method
   multi: () => ({
     hSet: () => {},
     hDel: () => {},

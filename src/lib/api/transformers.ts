@@ -1,4 +1,4 @@
-import { Train, Station, Departure, TrainType, DepartureStatus, TrainSearchResult } from '../../types';
+import { Train, Station, Departure, TrainType, DepartureStatus, TrainSearchResult, TrainDetails } from '../../types';
 import { MavStation, MavTrain, MavDeparture, MavArrival } from './mav';
 
 export function transformMavStation(mavStation: MavStation): Station {
@@ -14,7 +14,50 @@ export function transformMavStation(mavStation: MavStation): Station {
   };
 }
 
-export function transformMavTrain(mavTrain: MavTrain): Train {
+export function transformMavTrain(mavTrain: MavTrain, trainDetails?: TrainDetails): Train {
+  // Extract origin and destination from route details if available
+  let origin: Station | undefined;
+  let destination: Station | undefined;
+  
+  // Debug route data availability (only for selected trains)
+  if (mavTrain.VonatSzam && mavTrain.VonatSzam.includes('DEBUG_TRAIN_PLACEHOLDER')) {
+    if (trainDetails) {
+      console.log(`🔍 Transformer: Train ${mavTrain.VonatSzam} has trainDetails with ${trainDetails.stops?.length || 0} stops`);
+    } else {
+      console.log(`⚠️ Transformer: Train ${mavTrain.VonatSzam} has NO trainDetails`);
+    }
+  }
+  
+  if (trainDetails && trainDetails.stops && trainDetails.stops.length > 0) {
+    // Get origin from first stop
+    const firstStop = trainDetails.stops[0];
+    origin = {
+      id: 'unknown',
+      name: firstStop.name,
+      coordinates: { latitude: 0, longitude: 0 }
+    };
+    
+    // Get destination from last stop
+    const lastStop = trainDetails.stops[trainDetails.stops.length - 1];
+    destination = {
+      id: 'unknown', 
+      name: lastStop.name,
+      coordinates: { latitude: 0, longitude: 0 }
+    };
+    
+    // Only log for debugging specific trains
+    if (mavTrain.VonatSzam && mavTrain.VonatSzam.includes('DEBUG_TRAIN_PLACEHOLDER')) {
+      console.log(`✅ Transformer: Set origin/destination for ${mavTrain.VonatSzam}: ${origin.name} -> ${destination.name}`);
+    }
+  } else {
+    // Fallback to existing logic if no route details
+    destination = mavTrain.Celallomas ? {
+      id: 'unknown',
+      name: mavTrain.Celallomas,
+      coordinates: { latitude: 0, longitude: 0 }
+    } : undefined;
+  }
+
   const train = {
     id: mavTrain.VonatSzam,
     number: mavTrain.VonatSzam,
@@ -26,14 +69,11 @@ export function transformMavTrain(mavTrain: MavTrain): Train {
     speed: mavTrain.UtolsoGPS?.Sebesseg || 0,
     heading: mavTrain.UtolsoGPS?.Irany || 0,
     delay: mavTrain.Keses || 0,
-    destination: mavTrain.Celallomas ? {
-      id: 'unknown',
-      name: mavTrain.Celallomas,
-      coordinates: { latitude: 0, longitude: 0 }
-    } : undefined,
+    origin,
+    destination,
     // Enhanced fields
     gtfsId: mavTrain.gtfsId,
-    trainName: mavTrain.trainName,
+    trainName: mavTrain.trainName || trainDetails?.trainName,
     lastUpdate: mavTrain.UtolsoGPS?.Ido ? new Date(mavTrain.UtolsoGPS.Ido) : new Date(),
     isMoving: (mavTrain.UtolsoGPS?.Sebesseg || 0) > 5, // Consider moving if speed > 5 km/h
     // UIC locomotive type detection
@@ -48,6 +88,11 @@ export function transformMavTrain(mavTrain: MavTrain): Train {
       transformed: { lat: train.position.latitude, lng: train.position.longitude },
       mapboxFormat: [train.position.longitude, train.position.latitude]
     });
+  }
+  
+  // Log origin/destination extraction for debugging (only specific trains)
+  if (trainDetails && (origin || destination) && mavTrain.VonatSzam && mavTrain.VonatSzam.includes('DEBUG_TRAIN_PLACEHOLDER')) {
+    console.log(`🚂 Train ${mavTrain.VonatSzam} route: ${origin?.name || 'Unknown'} -> ${destination?.name || 'Unknown'}`);
   }
   
   return train;

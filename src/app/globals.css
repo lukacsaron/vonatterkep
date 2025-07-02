@@ -6,9 +6,10 @@
 @font-face {
   font-family: 'MNR2007';
   src: url('/fonts/mnr2007.ttf') format('truetype');
-  font-display: optional;
+  font-display: swap;
   font-weight: normal;
   font-style: normal;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F, U+2000-206F;
 }
 
 .mnr-font {

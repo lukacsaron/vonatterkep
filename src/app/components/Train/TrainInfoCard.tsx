@@ -1,7 +1,8 @@
 import { Train, TrainDetails } from '@/types';
+import { TrainType } from '@/types/trainTypes';
 import { TrainTypeBadge } from '../UI/TrainTypeBadge';
 import { DelayIndicator } from '../UI/DelayIndicator';
-import { MapPin, Navigation, Clock, Gauge, X, Zap, Settings, Thermometer } from 'lucide-react';
+import { MapPin, Navigation, Clock, Gauge, X, Zap, Settings, Thermometer, ChevronDown, ChevronRight } from 'lucide-react';
 import { formatTime } from '@/lib/utils';
 import { useState, useEffect, useRef } from 'react';
 import { 
@@ -18,9 +19,94 @@ import {
 interface TrainInfoCardProps {
   train: Train;
   onClose?: () => void;
+  disableClickOutside?: boolean;
 }
 
-export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
+interface LocomotiveInfoSectionProps {
+  locomotiveType: TrainType;
+}
+
+function LocomotiveInfoSection({ locomotiveType }: LocomotiveInfoSectionProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  return (
+    <div className="bg-gray-50 border-b flex-shrink-0">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsExpanded(!isExpanded);
+        }}
+        className="w-full px-4 md:px-4 py-4 md:py-3 flex items-center justify-between text-left hover:bg-gray-100 transition-colors min-h-[56px] md:min-h-auto"
+      >
+        <h3 className="text-base md:text-sm font-semibold text-gray-700">Mozgóállomány információ</h3>
+        {isExpanded ? (
+          <ChevronDown className="w-5 h-5 md:w-4 md:h-4 text-gray-500" />
+        ) : (
+          <ChevronRight className="w-5 h-5 md:w-4 md:h-4 text-gray-500" />
+        )}
+      </button>
+      
+      {isExpanded && (
+        <div className="px-4 md:px-4 pb-4 md:pb-4 space-y-3 md:space-y-2">
+          {/* Train type and name */}
+          <div className="flex items-center gap-3 md:gap-2">
+            <span 
+              className="text-3xl md:text-2xl mnr-font cursor-help" 
+              title={TRAIN_TYPE_DESCRIPTIONS[locomotiveType.uicCode] || locomotiveType.fullName}
+            >
+              {getTrainTypeEmoji(locomotiveType)}
+            </span>
+            <div>
+              <div className="font-semibold text-gray-900 text-lg md:text-base">
+                {locomotiveType.name}
+                {locomotiveType.nickname && (
+                  <span className="text-gray-600 font-normal ml-1">
+                    &ldquo;{locomotiveType.nickname}&rdquo;
+                  </span>
+                )}
+              </div>
+              <div className="text-base md:text-sm text-gray-600">
+                {locomotiveType.manufacturer} • {locomotiveType.yearIntroduced}
+                {locomotiveType.modernized && ` (felújítva: ${locomotiveType.modernized})`}
+              </div>
+            </div>
+          </div>
+          
+          {/* Features */}
+          <div className="flex flex-wrap gap-3 md:gap-2 mt-4 md:mt-3">
+            <div className={`flex items-center gap-2 md:gap-1 px-3 py-2 md:px-2 md:py-1 rounded-full text-sm md:text-sm font-medium min-h-[40px] md:min-h-auto ${
+              locomotiveType.hasAirConditioning 
+                ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                : 'bg-gray-100 text-gray-600 border border-gray-200'
+            }`}>
+              <Thermometer className="w-4 h-4 md:w-3 md:h-3" />
+              {locomotiveType.hasAirConditioning ? 'Klimatizált' : 'Nincs klíma'}
+            </div>
+            
+            {locomotiveType.maxSpeed && (
+              <div className="flex items-center gap-2 md:gap-1 px-3 py-2 md:px-2 md:py-1 rounded-full text-sm md:text-sm font-medium bg-green-100 text-green-800 border border-green-200 min-h-[40px] md:min-h-auto">
+                <Gauge className="w-4 h-4 md:w-3 md:h-3" />
+                Max: {locomotiveType.maxSpeed} km/h
+              </div>
+            )}
+            
+            <div className="flex items-center gap-2 md:gap-1 px-3 py-2 md:px-2 md:py-1 rounded-full text-sm md:text-sm font-medium bg-yellow-100 text-yellow-800 border border-yellow-200 min-h-[40px] md:min-h-auto">
+              <span>Megbízhatóság:</span>
+              <span>{getReliabilityStars(locomotiveType.reliabilityRating)}</span>
+            </div>
+          </div>
+          
+          {/* Comfort description */}
+          <div className="text-base md:text-sm text-gray-600 mt-3 md:mt-2">
+            <span className="font-medium">Komfort:</span> {getComfortDescription(locomotiveType)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TrainInfoCard({ train, onClose, disableClickOutside = false }: TrainInfoCardProps) {
   const [trainDetails, setTrainDetails] = useState<Train | null>(null);
   const [loading, setLoading] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -114,8 +200,10 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
     return codeMatch ? `[${codeMatch[1]}]` : '';
   };
 
-  // Handle click outside to close
+  // Handle click outside to close (only when not disabled)
   useEffect(() => {
+    if (!onClose || disableClickOutside) return;
+    
     const handleClickOutside = (event: MouseEvent) => {
       if (cardRef.current && !cardRef.current.contains(event.target as Node) && onClose) {
         onClose();
@@ -126,21 +214,33 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [onClose]);
+  }, [onClose, disableClickOutside]);
 
   return (
-    <div ref={cardRef} className="bg-white rounded-l-3xl shadow-xl min-w-[350px] max-w-[400px] max-h-[80vh] relative border-l border-gray-300 overflow-hidden">
+    <div 
+      ref={cardRef} 
+      className="bg-white w-full h-full md:rounded-3xl md:shadow-xl md:max-w-[400px] md:max-h-[80vh] relative md:border md:border-gray-300 overflow-hidden flex flex-col"
+      style={{ 
+        margin: 0,
+        maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vw' : undefined
+      }}
+    >
+      {/* Mobile handle bar */}
+      <div className="md:hidden flex justify-center py-2 bg-gray-100 w-full" style={{ margin: 0 }}>
+        <div className="w-12 h-1 bg-gray-300 rounded-full"></div>
+      </div>
+      
       {/* Header - Clean design matching app theme */}
-      <div className="bg-white border-b-2 border-blue-500 p-4 relative">
+      <div className="bg-white border-b-2 border-blue-500 p-4 md:p-4 relative flex-shrink-0">
         <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-8 bg-blue-500 rounded"></div>
+          <div className="flex items-center gap-3">
+            <div className="w-1 h-12 md:w-2 md:h-8 bg-blue-500 rounded"></div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">
+              <h2 className="text-2xl md:text-xl font-bold text-gray-900">
                 {train.number}
               </h2>
               {getRouteCode() && (
-                <div className="text-sm text-blue-600 font-medium">
+                <div className="text-base md:text-sm text-blue-600 font-medium">
                   {getRouteCode()}
                 </div>
               )}
@@ -149,36 +249,48 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
           {onClose && (
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
+              className="text-gray-400 hover:text-gray-600 p-3 md:p-2 hover:bg-gray-100 rounded-full transition-colors duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Bezárás"
             >
-              <X className="w-5 h-5" />
+              <X className="w-6 h-6 md:w-5 md:h-5" />
             </button>
           )}
         </div>
         
         {/* Route direction */}
-        <div className="text-sm mt-3 text-gray-600 flex items-center">
-          <span className="font-medium">Cél:</span>
-          <span className="ml-2 font-semibold text-gray-900">
-            {trainDetails?.destination?.name || train.destination?.name || 'Ismeretlen'}
-          </span>
+        <div className="text-base md:text-sm mt-4 md:mt-3 text-gray-600">
+          <span className="font-medium">Útvonal:</span>
+          <div className="ml-2 font-semibold text-gray-900 mt-2 md:mt-1 text-lg md:text-base">
+            {(() => {
+              // Prioritize trainDetails (enhanced data) over base train data
+              const origin = trainDetails?.origin?.name || train.origin?.name;
+              const destination = trainDetails?.destination?.name || train.destination?.name;
+              
+              if (origin && destination) {
+                return `${origin} → ${destination}`;
+              } else if (destination) {
+                return `${destination}`;
+              } else {
+                return 'Ismeretlen útvonal';
+              }
+            })()}
+          </div>
         </div>
         
         {/* Status information grid */}
-        <div className="grid grid-cols-2 gap-3 mt-4">
-          <div className="flex items-center gap-2">
-            <Gauge className="w-4 h-4 text-blue-500" />
+        <div className="grid grid-cols-2 gap-4 md:gap-3 mt-6 md:mt-4">
+          <div className="flex items-center gap-3 md:gap-2 p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-xl md:rounded-none">
+            <Gauge className="w-5 h-5 md:w-4 md:h-4 text-blue-500" />
             <div>
-              <div className="text-xs text-gray-500">Sebesség</div>
-              <div className="font-semibold text-gray-900">{Math.round(train.speed)} km/h</div>
+              <div className="text-sm md:text-xs text-gray-500">Sebesség</div>
+              <div className="font-semibold text-gray-900 text-lg md:text-base">{Math.round(train.speed)} km/h</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-blue-500" />
+          <div className="flex items-center gap-3 md:gap-2 p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-xl md:rounded-none">
+            <Clock className="w-5 h-5 md:w-4 md:h-4 text-blue-500" />
             <div>
-              <div className="text-xs text-gray-500">Késés</div>
-              <div className={`font-semibold ${
+              <div className="text-sm md:text-xs text-gray-500">Késés</div>
+              <div className={`font-semibold text-lg md:text-base ${
                 (trainDetails?.delay ?? train.delay) > 0 
                   ? 'text-red-600' 
                   : 'text-green-600'
@@ -188,11 +300,11 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
             </div>
           </div>
           {train.uicInfo && (
-            <div className="col-span-2 flex items-center gap-2">
-              <Settings className="w-4 h-4 text-blue-500" />
+            <div className="col-span-2 flex items-center gap-3 md:gap-2 p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-xl md:rounded-none">
+              <Settings className="w-5 h-5 md:w-4 md:h-4 text-blue-500" />
               <div>
-                <div className="text-xs text-gray-500">UIC kód</div>
-                <div className="font-mono text-sm font-semibold text-gray-900">
+                <div className="text-sm md:text-xs text-gray-500">UIC kód</div>
+                <div className="font-mono text-base md:text-sm font-semibold text-gray-900">
                   {train.uicInfo.rawUIC?.replace(/(.{2})(.{2})(.{4})(.+)/, '$1 $2 $3 $4')}
                 </div>
               </div>
@@ -203,72 +315,14 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
 
       {/* Locomotive Information Section */}
       {train.locomotiveType && (
-        <div className="bg-gray-50 px-4 py-4 border-b">
-          <div className="mb-2">
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Mozgóállomány információ</h3>
-          </div>
-          <div className="space-y-2">
-            {/* Train type and name */}
-            <div className="flex items-center gap-2">
-              <span 
-                className="text-2xl mnr-font cursor-help" 
-                title={TRAIN_TYPE_DESCRIPTIONS[train.locomotiveType.uicCode] || train.locomotiveType.fullName}
-              >
-                {getTrainTypeEmoji(train.locomotiveType)}
-              </span>
-              <div>
-                <div className="font-semibold text-gray-900">
-                  {train.locomotiveType.name}
-                  {train.locomotiveType.nickname && (
-                    <span className="text-gray-600 font-normal ml-1">
-                      &ldquo;{train.locomotiveType.nickname}&rdquo;
-                    </span>
-                  )}
-                </div>
-                <div className="text-sm text-gray-600">
-                  {train.locomotiveType.manufacturer} • {train.locomotiveType.yearIntroduced}
-                  {train.locomotiveType.modernized && ` (felújítva: ${train.locomotiveType.modernized})`}
-                </div>
-              </div>
-            </div>
-            
-            {/* Features */}
-            <div className="flex flex-wrap gap-2 mt-3">
-              <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-sm font-medium ${
-                train.locomotiveType.hasAirConditioning 
-                  ? 'bg-blue-100 text-blue-800 border border-blue-200' 
-                  : 'bg-gray-100 text-gray-600 border border-gray-200'
-              }`}>
-                <Thermometer className="w-3 h-3" />
-                {train.locomotiveType.hasAirConditioning ? 'Klimatizált' : 'Nincs klíma'}
-              </div>
-              
-              {train.locomotiveType.maxSpeed && (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 border border-green-200">
-                  <Gauge className="w-3 h-3" />
-                  Max: {train.locomotiveType.maxSpeed} km/h
-                </div>
-              )}
-              
-              <div className="flex items-center gap-1 px-2 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
-                <span>Megbízhatóság:</span>
-                <span>{getReliabilityStars(train.locomotiveType.reliabilityRating)}</span>
-              </div>
-            </div>
-            
-            {/* Comfort description */}
-            <div className="text-sm text-gray-600 mt-2">
-              <span className="font-medium">Komfort:</span> {getComfortDescription(train.locomotiveType)}
-            </div>
-          </div>
-        </div>
+        <LocomotiveInfoSection locomotiveType={train.locomotiveType} />
       )}
 
       {/* Service Features Section */}
       {(train.infoServices || trainDetails?.infoServices) && (
-        <div className="bg-gray-50 px-4 py-4 border-b">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Szolgáltatások</h3>
-          <div className="flex flex-wrap gap-2">
+        <div className="bg-gray-50 px-4 md:px-4 py-4 md:py-4 border-b flex-shrink-0">
+          <h3 className="text-base md:text-sm font-semibold text-gray-700 mb-4 md:mb-3">Szolgáltatások</h3>
+          <div className="flex flex-wrap gap-3 md:gap-2">
             {(trainDetails?.infoServices || train.infoServices || []).map((service, index) => {
               const serviceChar = getMNRServiceCharacter(service.fontCode);
               const serviceDesc = getServiceDescription(service.fontCode);
@@ -278,13 +332,13 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
               return (
                 <div 
                   key={index}
-                  className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-200 rounded-full text-sm hover:bg-blue-50 hover:border-blue-200 transition-colors cursor-help"
+                  className="flex items-center gap-2 md:gap-1 px-3 py-2 md:px-2 md:py-1 bg-white border border-gray-200 rounded-full text-sm md:text-sm hover:bg-blue-50 hover:border-blue-200 transition-colors cursor-help min-h-[44px] md:min-h-auto"
                   title={serviceDesc}
                 >
-                  <span className="mnr-font text-blue-600 font-medium text-base">
+                  <span className="mnr-font text-blue-600 font-medium text-lg md:text-base">
                     {serviceChar}
                   </span>
-                  <span className="text-gray-700 text-xs font-medium">
+                  <span className="text-gray-700 text-sm md:text-xs font-medium">
                     {serviceDesc}
                   </span>
                 </div>
@@ -295,28 +349,28 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
       )}
       
       {/* Scrollable content */}
-      <div className="overflow-y-auto max-h-[calc(80vh-200px)] px-4 py-3">
+      <div className="overflow-y-auto flex-1 px-4 md:px-4 py-4 md:py-3">
 
         {/* Loading state */}
         {loading && (
-          <div className="text-center py-4">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-            <div className="text-sm text-gray-600 mt-2">További részletek betöltése...</div>
+          <div className="text-center py-8 md:py-4">
+            <div className="animate-spin rounded-full h-8 w-8 md:h-6 md:w-6 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="text-base md:text-sm text-gray-600 mt-3 md:mt-2">További részletek betöltése...</div>
           </div>
         )}
 
         {/* Route timetable table */}
         {trainDetails?.route && trainDetails.route.length > 0 && (
-          <div className="space-y-3">
-            <h4 className="font-semibold text-sm">Menetrend</h4>
+          <div className="space-y-4 md:space-y-3">
+            <h4 className="font-semibold text-lg md:text-sm">Menetrend</h4>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
+              <table className="w-full text-base md:text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="text-left py-2 px-1 font-medium text-gray-700">Állomás</th>
-                    <th className="text-center py-2 px-1 font-medium text-gray-700">Érk.</th>
-                    <th className="text-center py-2 px-1 font-medium text-gray-700">Ind.</th>
-                    <th className="text-center py-2 px-1 font-medium text-gray-700">Vágány</th>
+                    <th className="text-left py-3 md:py-2 px-2 md:px-1 font-medium text-gray-700">Állomás</th>
+                    <th className="text-center py-3 md:py-2 px-2 md:px-1 font-medium text-gray-700">Érk.</th>
+                    <th className="text-center py-3 md:py-2 px-2 md:px-1 font-medium text-gray-700">Ind.</th>
+                    <th className="text-center py-3 md:py-2 px-2 md:px-1 font-medium text-gray-700">Vágány</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -326,19 +380,19 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
                     return (
                       <tr 
                         key={index} 
-                        className={`border-b border-gray-100 ${isPassed ? 'text-gray-500' : ''}`}
+                        className={`border-b border-gray-100 ${isPassed ? 'text-gray-500' : ''} hover:bg-gray-50`}
                       >
-                        <td className="py-2 px-1 font-medium">
+                        <td className="py-4 md:py-2 px-2 md:px-1 font-medium">
                           {stop.station.name}
                         </td>
-                        <td className="text-center py-2 px-1">
+                        <td className="text-center py-4 md:py-2 px-2 md:px-1">
                           {stop.arrival ? (
                             <div className="flex flex-col items-center">
                               <span className={isPassed ? 'line-through' : ''}>
                                 {formatTime(new Date(stop.arrival))}
                               </span>
                               {stop.actualArrival && formatTime(new Date(stop.actualArrival)) !== formatTime(new Date(stop.arrival)) && (
-                                <span className={stop.delay && stop.delay > 0 ? 'text-red-600 text-xs' : 'text-green-600 text-xs'}>
+                                <span className={`${stop.delay && stop.delay > 0 ? 'text-red-600' : 'text-green-600'} text-sm md:text-xs`}>
                                   {formatTime(new Date(stop.actualArrival))}
                                 </span>
                               )}
@@ -347,14 +401,14 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
                             '-'
                           )}
                         </td>
-                        <td className="text-center py-2 px-1">
+                        <td className="text-center py-4 md:py-2 px-2 md:px-1">
                           {stop.departure ? (
                             <div className="flex flex-col items-center">
                               <span className={isPassed ? 'line-through' : ''}>
                                 {formatTime(new Date(stop.departure))}
                               </span>
                               {stop.actualDeparture && formatTime(new Date(stop.actualDeparture)) !== formatTime(new Date(stop.departure)) && (
-                                <span className={stop.delay && stop.delay > 0 ? 'text-red-600 text-xs' : 'text-green-600 text-xs'}>
+                                <span className={`${stop.delay && stop.delay > 0 ? 'text-red-600' : 'text-green-600'} text-sm md:text-xs`}>
                                   {formatTime(new Date(stop.actualDeparture))}
                                 </span>
                               )}
@@ -363,9 +417,9 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
                             '-'
                           )}
                         </td>
-                        <td className="text-center py-2 px-1">
+                        <td className="text-center py-4 md:py-2 px-2 md:px-1">
                           {stop.platform ? (
-                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
+                            <span className="bg-blue-100 text-blue-800 px-3 py-2 md:px-2 md:py-1 rounded text-sm md:text-xs font-medium">
                               {stop.platform}
                             </span>
                           ) : (
@@ -383,8 +437,8 @@ export function TrainInfoCard({ train, onClose }: TrainInfoCardProps) {
 
         {/* Fallback for no enhanced details */}
         {!loading && !trainDetails && train.gtfsId && (
-          <div className="text-center py-4 text-gray-600">
-            <div className="text-sm">További vonatrészletek nem elérhetőek</div>
+          <div className="text-center py-8 md:py-4 text-gray-600">
+            <div className="text-base md:text-sm">További vonatrészletek nem elérhetőek</div>
           </div>
         )}
 

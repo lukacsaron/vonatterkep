@@ -2,7 +2,7 @@
 
 import { useTrains } from '@/lib/hooks/useTrains';
 import { useMapStore } from '@/lib/store';
-import { TrainInfoCard } from '../Train/TrainInfoCard';
+import { TrainInfoModal } from '../Train/TrainInfoModal';
 import { LoadingSpinner } from '../UI/LoadingSpinner';
 import { getDelayColor, getDelayCategory } from '@/lib/utils';
 import { Train } from '@/types';
@@ -90,14 +90,10 @@ export function SimpleMap() {
       </div>
 
       {/* Train info popup */}
-      {selectedTrain && (
-        <div className="absolute top-4 right-4 z-50">
-          <TrainInfoCard 
-            train={selectedTrain} 
-            onClose={() => setSelectedTrain(null)} 
-          />
-        </div>
-      )}
+      <TrainInfoModal 
+        train={selectedTrain} 
+        onClose={() => setSelectedTrain(null)} 
+      />
 
       {/* Info banner */}
       <div className="absolute bottom-4 left-4 bg-blue-100 border border-blue-300 text-blue-800 px-4 py-2 rounded">
