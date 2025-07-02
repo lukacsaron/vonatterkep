@@ -419,8 +419,18 @@ function TrainMapComponent() {
 
     // Clean up previous route layers
     const cleanupRouteLayers = () => {
-      // Remove route layers if they exist
-      ['route-line', 'route-stops-passed', 'route-stops-upcoming', 'route-stops-next', 'route-stop-labels'].forEach(layerId => {
+      // Remove all route layers if they exist (enhanced layer system)
+      [
+        'route-line', 
+        'route-stops-passed', 
+        'route-stops-upcoming', 
+        'route-stops-next', 
+        'route-stop-labels',
+        'route-stop-label-backgrounds',
+        'route-stop-labels-primary',
+        'route-stop-names',
+        'route-stop-delay-indicators'
+      ].forEach(layerId => {
         if (mapInstance.getLayer(layerId)) {
           mapInstance.removeLayer(layerId);
         }
@@ -573,42 +583,214 @@ function TrainMapComponent() {
       }
     });
 
-    // ETA labels for upcoming stops
+    // Enhanced ETA Label System - Progressive UX Approach
+    
+    // 1. Background pills for ETA labels (high contrast foundation)
     mapInstance.addLayer({
-      id: 'route-stop-labels',
-      type: 'symbol',
+      id: 'route-stop-label-backgrounds',
+      type: 'circle',
       source: 'route-stops-source',
-      filter: ['==', ['get', 'isPassed'], false],
-      layout: {
-        'text-field': ['get', 'eta'],
-        'text-size': 12,
-        'text-offset': [0, 1.5],
-        'text-anchor': 'top'
-      },
+      filter: ['all',
+        ['==', ['get', 'isPassed'], false],
+        ['!=', ['get', 'eta'], ''] // Only show if we have ETA data
+      ],
+      layout: {},
       paint: {
-        'text-color': ['case',
-          ['>', ['get', 'delay'], 0], '#ef4444', // Red for delayed
-          '#10b981' // Green for on-time
+        // Adaptive sizing based on zoom level for better visibility
+        'circle-radius': [
+          'interpolate', ['linear'], ['zoom'],
+          8, 14,  // At zoom 8: 14px radius
+          12, 18, // At zoom 12: 18px radius  
+          16, 22  // At zoom 16: 22px radius
         ],
-        'text-halo-color': '#ffffff',
-        'text-halo-width': 2
+        // High-contrast background with status color coding
+        'circle-color': ['case',
+          ['>', ['get', 'delay'], 0], '#dc2626', // Strong red for delayed
+          '#059669' // Strong green for on-time
+        ],
+        'circle-opacity': 0.95,
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-opacity': 1
       }
     });
 
-    // Fit bounds to show the entire route
+    // 2. Primary ETA text (large, high contrast)
+    mapInstance.addLayer({
+      id: 'route-stop-labels-primary',
+      type: 'symbol',
+      source: 'route-stops-source',
+      filter: ['all',
+        ['==', ['get', 'isPassed'], false],
+        ['!=', ['get', 'eta'], '']
+      ],
+      layout: {
+        'text-field': ['get', 'eta'],
+        // Zoom-adaptive text sizing for optimal readability
+        'text-size': [
+          'interpolate', ['linear'], ['zoom'],
+          8, 11,  // At zoom 8: 11px
+          12, 14, // At zoom 12: 14px  
+          16, 16  // At zoom 16: 16px
+        ],
+        'text-offset': [0, 0], // Centered on the background pill
+        'text-anchor': 'center',
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'], // Bold font for visibility
+        'text-allow-overlap': false, // Smart collision detection
+        'text-ignore-placement': false
+      },
+      paint: {
+        'text-color': '#ffffff', // Always white for maximum contrast
+        'text-opacity': 1
+      }
+    });
+
+    // 3. Station name labels for context (shown at higher zoom levels)
+    mapInstance.addLayer({
+      id: 'route-stop-names',
+      type: 'symbol',
+      source: 'route-stops-source',
+      filter: ['all',
+        ['==', ['get', 'isPassed'], false],
+        ['!=', ['get', 'eta'], '']
+      ],
+      minzoom: 11, // Only show station names when zoomed in enough
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-size': [
+          'interpolate', ['linear'], ['zoom'],
+          11, 10, // At zoom 11: 10px
+          16, 12  // At zoom 16: 12px
+        ],
+        'text-offset': [0, 2.5], // Position below the ETA
+        'text-anchor': 'top',
+        'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular'],
+        'text-max-width': 8, // Wrap long station names
+        'text-allow-overlap': false
+      },
+      paint: {
+        'text-color': '#374151', // Dark gray
+        'text-halo-color': '#ffffff',
+        'text-halo-width': 3,
+        'text-halo-blur': 1
+      }
+    });
+
+    // 4. Delay indicator badges for delayed trains (additional progressive enhancement)
+    mapInstance.addLayer({
+      id: 'route-stop-delay-indicators',
+      type: 'symbol',
+      source: 'route-stops-source',
+      filter: ['all',
+        ['==', ['get', 'isPassed'], false],
+        ['>', ['get', 'delay'], 0] // Only for delayed stops
+      ],
+      layout: {
+        'text-field': [
+          'concat', 
+          '+', 
+          ['to-string', ['get', 'delay']], 
+          ' min'
+        ],
+        'text-size': [
+          'interpolate', ['linear'], ['zoom'],
+          8, 8,   // At zoom 8: 8px
+          12, 10, // At zoom 12: 10px  
+          16, 11  // At zoom 16: 11px
+        ],
+        'text-offset': [0, -2.2], // Position above the ETA
+        'text-anchor': 'bottom',
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold']
+      },
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': '#dc2626',
+        'text-halo-width': 3
+      }
+    });
+
+    // Interactive enhancements for progressive UX
+    
+    // Event handler functions (defined outside for proper cleanup)
+    const handleMouseEnter = () => {
+      mapInstance.getCanvas().style.cursor = 'pointer';
+    };
+    
+    const handleMouseLeave = () => {
+      mapInstance.getCanvas().style.cursor = '';
+    };
+
+    // Enhanced click handler for stop details
+    const handleStopClick = (e: any) => {
+      if (e.features && e.features[0]) {
+        const feature = e.features[0];
+        const stopName = feature.properties?.name;
+        const eta = feature.properties?.eta;
+        const delay = feature.properties?.delay || 0;
+        const platform = feature.properties?.platform;
+        
+        // Create rich popup content
+        const popupContent = `
+          <div style="padding: 8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+            <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #1f2937;">${stopName}</h3>
+            <div style="font-size: 13px; color: #4b5563;">
+              <div style="margin-bottom: 4px;">
+                <strong>Érkezés:</strong> <span style="color: ${delay > 0 ? '#dc2626' : '#059669'};">${eta}</span>
+              </div>
+              ${delay > 0 ? `<div style="margin-bottom: 4px; color: #dc2626;"><strong>Késés:</strong> +${delay} perc</div>` : ''}
+              ${platform ? `<div style="color: #6b7280;"><strong>Vágány:</strong> ${platform}</div>` : ''}
+            </div>
+          </div>
+        `;
+        
+        new mapboxgl.Popup({
+          closeButton: true,
+          closeOnClick: true,
+          offset: [0, -10]
+        })
+        .setLngLat(e.lngLat)
+        .setHTML(popupContent)
+        .addTo(mapInstance);
+      }
+    };
+    
+    // Add event listeners to interactive elements
+    ['route-stop-label-backgrounds', 'route-stop-labels-primary'].forEach(layerId => {
+      mapInstance.on('mouseenter', layerId, handleMouseEnter);
+      mapInstance.on('mouseleave', layerId, handleMouseLeave);
+      mapInstance.on('click', layerId, handleStopClick);
+    });
+
+    // Fit bounds to show the entire route with improved padding
     if (decodedPath.length > 0) {
       const bounds = decodedPath.reduce((bounds, coord) => {
         return bounds.extend(coord as [number, number]);
       }, new mapboxgl.LngLatBounds(decodedPath[0] as [number, number], decodedPath[0] as [number, number]));
 
+      // Smart padding based on screen size
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+      const padding = isMobile 
+        ? { top: 80, bottom: 100, left: 20, right: 20 } // More space for mobile UI
+        : { top: 60, bottom: 60, left: 60, right: 350 }; // Account for desktop sidebar
+
       mapInstance.fitBounds(bounds, {
-        padding: { top: 50, bottom: 50, left: 50, right: 50 },
-        duration: 1500
+        padding,
+        duration: 1500,
+        maxZoom: 14 // Prevent over-zooming on short routes
       });
     }
 
-    // Cleanup function
+    // Cleanup function with event listener removal
     return () => {
+      // Remove event listeners before cleaning up layers
+      ['route-stop-label-backgrounds', 'route-stop-labels-primary'].forEach(layerId => {
+        if (mapInstance.getLayer(layerId)) {
+          mapInstance.off('mouseenter', layerId, handleMouseEnter);
+          mapInstance.off('mouseleave', layerId, handleMouseLeave);
+          mapInstance.off('click', layerId, handleStopClick);
+        }
+      });
+      
       cleanupRouteLayers();
     };
   }, [routeDetails, mapReady, selectedTrain]);
