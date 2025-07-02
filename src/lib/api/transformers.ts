@@ -1,6 +1,15 @@
 import { Train, Station, Departure, TrainType, DepartureStatus, TrainSearchResult, TrainDetails } from '../../types';
 import { MavStation, MavTrain, MavDeparture, MavArrival } from './mav';
 
+// Speed conversion utilities
+function msToKmh(speedMs: number): number {
+  return speedMs * 3.6;
+}
+
+function kmhToMs(speedKmh: number): number {
+  return speedKmh / 3.6;
+}
+
 export function transformMavStation(mavStation: MavStation): Station {
   return {
     id: mavStation.UicKod,
@@ -66,7 +75,7 @@ export function transformMavTrain(mavTrain: MavTrain, trainDetails?: TrainDetail
       latitude: mavTrain.UtolsoGPS?.Lat || 0,
       longitude: mavTrain.UtolsoGPS?.Lng || 0
     },
-    speed: mavTrain.UtolsoGPS?.Sebesseg || 0,
+    speed: msToKmh(mavTrain.UtolsoGPS?.Sebesseg || 0),
     heading: mavTrain.UtolsoGPS?.Irany || 0,
     delay: mavTrain.Keses || 0,
     origin,
@@ -75,7 +84,7 @@ export function transformMavTrain(mavTrain: MavTrain, trainDetails?: TrainDetail
     gtfsId: mavTrain.gtfsId,
     trainName: mavTrain.trainName || trainDetails?.trainName,
     lastUpdate: mavTrain.UtolsoGPS?.Ido ? new Date(mavTrain.UtolsoGPS.Ido) : new Date(),
-    isMoving: (mavTrain.UtolsoGPS?.Sebesseg || 0) > 5, // Consider moving if speed > 5 km/h
+    isMoving: (mavTrain.UtolsoGPS?.Sebesseg || 0) > kmhToMs(5), // Consider moving if speed > 5 km/h (converted to m/s)
     // UIC locomotive type detection
     locomotiveType: mavTrain.locomotiveType,
     uicInfo: mavTrain.uicInfo
