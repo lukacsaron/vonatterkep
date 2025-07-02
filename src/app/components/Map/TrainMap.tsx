@@ -4,13 +4,13 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useMapStore, useLocationStore } from '@/lib/store';
-import { useTrains } from '@/lib/hooks/useTrains';
+import { useTrains, useTrainRoute } from '@/lib/hooks/useTrains';
 import { TrainInfoModal } from '../Train/TrainInfoModal';
 import { LoadingSpinner } from '../UI/LoadingSpinner';
 import { DelayLegend } from '../UI/DelayLegend';
 import { LocationButton } from '../UI/LocationButton';
 import { Train, DelayCategory } from '@/types';
-import { getDelayCategory, getDelayColor } from '@/lib/utils';
+import { getDelayCategory, getDelayColor, decodePolyline, formatTime } from '@/lib/utils';
 // --- ADDED: Import RefreshCw icon and cn utility ---
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -29,6 +29,8 @@ function TrainMapComponent() {
   const { selectedTrain, focusedTrain, setSelectedTrain, setFocusedTrain, setBounds } = useMapStore();
   // --- CHANGED: Destructure `isFetching` and `refetch` from the useTrains hook ---
   const { data: trains, isLoading, isFetching, error, refetch } = useTrains();
+  // Hook for fetching train route details
+  const { data: routeDetails } = useTrainRoute(selectedTrain?.gtfsId || null);
   
   // Location store hooks
   const { userLocation, isCentered, setIsCentered } = useLocationStore();
@@ -408,6 +410,208 @@ function TrainMapComponent() {
       map.current.setLayoutProperty(layerId, 'visibility', showRailwayOverlay ? 'visible' : 'none');
     }
   }, [showRailwayOverlay, mapReady]);
+
+  // Handle train route visualization
+  useEffect(() => {
+    if (!map.current || !mapReady) return;
+
+    const mapInstance = map.current;
+
+    // Clean up previous route layers
+    const cleanupRouteLayers = () => {
+      // Remove route layers if they exist
+      ['route-line', 'route-stops-passed', 'route-stops-upcoming', 'route-stops-next', 'route-stop-labels'].forEach(layerId => {
+        if (mapInstance.getLayer(layerId)) {
+          mapInstance.removeLayer(layerId);
+        }
+      });
+      // Remove route sources if they exist
+      ['route-line-source', 'route-stops-source'].forEach(sourceId => {
+        if (mapInstance.getSource(sourceId)) {
+          mapInstance.removeSource(sourceId);
+        }
+      });
+    };
+
+    // Always clean up first
+    cleanupRouteLayers();
+
+    // If no route details, we're done
+    if (!routeDetails) return;
+
+    console.log('🗺️ Rendering route for train:', selectedTrain?.number, {
+      geometryLength: routeDetails.geometry.length,
+      stopsCount: routeDetails.stops.length,
+      stopsWithCoordinates: routeDetails.stops.filter(s => s.coordinates).length,
+      sampleStopCoordinates: routeDetails.stops.slice(0, 3).map(s => ({ 
+        name: s.name, 
+        coords: s.coordinates 
+      }))
+    });
+
+    // Decode the polyline
+    const decodedPath = decodePolyline(routeDetails.geometry);
+    
+    // Create GeoJSON for the route line
+    const routeLineGeoJSON = {
+      type: 'Feature' as const,
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: decodedPath
+      },
+      properties: {}
+    };
+
+    // Add route line source and layer
+    mapInstance.addSource('route-line-source', {
+      type: 'geojson',
+      data: routeLineGeoJSON
+    });
+
+    mapInstance.addLayer({
+      id: 'route-line',
+      type: 'line',
+      source: 'route-line-source',
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
+      paint: {
+        'line-color': '#2563eb', // Blue color
+        'line-width': 3,
+        'line-dasharray': [2, 1] // Dashed line
+      }
+    });
+
+    // Create GeoJSON for stops
+    const currentTime = new Date();
+    const stopFeatures = routeDetails.stops
+      .filter(stop => {
+        // Only include stops that have GPS coordinates
+        return stop.coordinates && stop.coordinates.latitude && stop.coordinates.longitude;
+      })
+      .map((stop, originalIndex) => {
+        // Find the original index of this stop in the full stops array
+        const fullStopIndex = routeDetails.stops.findIndex(s => s.id === stop.id || s.name === stop.name);
+        const isNextStop = !stop.isPassed && 
+          (fullStopIndex === 0 || routeDetails.stops[fullStopIndex - 1]?.isPassed);
+        
+        return {
+          type: 'Feature' as const,
+          geometry: {
+            type: 'Point' as const,
+            // Use actual GPS coordinates from EMMA API
+            coordinates: [stop.coordinates!.longitude, stop.coordinates!.latitude]
+          },
+          properties: {
+            name: stop.name,
+            isPassed: stop.isPassed,
+            isNextStop,
+            eta: stop.scheduledArrival ? formatTime(stop.scheduledArrival) : '',
+            delay: stop.arrivalDelay,
+            platform: stop.platform || '',
+            stopId: stop.id || ''
+          }
+        };
+      });
+
+    const stopsGeoJSON = {
+      type: 'FeatureCollection' as const,
+      features: stopFeatures
+    };
+
+    // Add stops source
+    mapInstance.addSource('route-stops-source', {
+      type: 'geojson',
+      data: stopsGeoJSON
+    });
+
+    // Layer for passed stops (gray, smaller)
+    mapInstance.addLayer({
+      id: 'route-stops-passed',
+      type: 'circle',
+      source: 'route-stops-source',
+      filter: ['==', ['get', 'isPassed'], true],
+      paint: {
+        'circle-radius': 4,
+        'circle-color': '#9ca3af', // Gray
+        'circle-opacity': 0.6,
+        'circle-stroke-width': 1,
+        'circle-stroke-color': '#6b7280'
+      }
+    });
+
+    // Layer for upcoming stops (blue, larger)
+    mapInstance.addLayer({
+      id: 'route-stops-upcoming',
+      type: 'circle',
+      source: 'route-stops-source',
+      filter: ['all', 
+        ['==', ['get', 'isPassed'], false],
+        ['==', ['get', 'isNextStop'], false]
+      ],
+      paint: {
+        'circle-radius': 6,
+        'circle-color': '#2563eb', // Blue
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff'
+      }
+    });
+
+    // Layer for next stop (pulsing animation)
+    mapInstance.addLayer({
+      id: 'route-stops-next',
+      type: 'circle',
+      source: 'route-stops-source',
+      filter: ['==', ['get', 'isNextStop'], true],
+      paint: {
+        'circle-radius': 8,
+        'circle-color': '#2563eb', // Blue
+        'circle-stroke-width': 3,
+        'circle-stroke-color': '#ffffff',
+        'circle-opacity': 0.8
+      }
+    });
+
+    // ETA labels for upcoming stops
+    mapInstance.addLayer({
+      id: 'route-stop-labels',
+      type: 'symbol',
+      source: 'route-stops-source',
+      filter: ['==', ['get', 'isPassed'], false],
+      layout: {
+        'text-field': ['get', 'eta'],
+        'text-size': 12,
+        'text-offset': [0, 1.5],
+        'text-anchor': 'top'
+      },
+      paint: {
+        'text-color': ['case',
+          ['>', ['get', 'delay'], 0], '#ef4444', // Red for delayed
+          '#10b981' // Green for on-time
+        ],
+        'text-halo-color': '#ffffff',
+        'text-halo-width': 2
+      }
+    });
+
+    // Fit bounds to show the entire route
+    if (decodedPath.length > 0) {
+      const bounds = decodedPath.reduce((bounds, coord) => {
+        return bounds.extend(coord as [number, number]);
+      }, new mapboxgl.LngLatBounds(decodedPath[0] as [number, number], decodedPath[0] as [number, number]));
+
+      mapInstance.fitBounds(bounds, {
+        padding: { top: 50, bottom: 50, left: 50, right: 50 },
+        duration: 1500
+      });
+    }
+
+    // Cleanup function
+    return () => {
+      cleanupRouteLayers();
+    };
+  }, [routeDetails, mapReady, selectedTrain]);
 
   // Handle user location and marker
   useEffect(() => {

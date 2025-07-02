@@ -40,6 +40,7 @@ export function TrainInfoModal({ train, onClose }: TrainInfoModalProps) {
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
+    // Check if clicking outside the modal content area
     if (e.target === e.currentTarget) {
       handleClose();
     }
@@ -100,22 +101,10 @@ export function TrainInfoModal({ train, onClose }: TrainInfoModalProps) {
         padding: 0
       }}
     >
-      {/* Desktop backdrop */}
-      <div 
-        className="hidden md:block absolute inset-0 bg-black bg-opacity-50"
-        onClick={handleBackdropClick}
-      />
-      
-      {/* Mobile backdrop */}
-      <div 
-        className="md:hidden absolute inset-0 bg-black bg-opacity-30"
-        onClick={handleBackdropClick}
-        style={{ margin: 0, padding: 0 }}
-      />
-      
       {/* Modal container */}
       <div 
         className="flex items-end md:items-center justify-start md:justify-end h-full w-full"
+        onClick={handleBackdropClick}
         style={{ 
           margin: 0, 
           padding: '0',

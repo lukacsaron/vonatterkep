@@ -43,6 +43,7 @@ export interface Train {
 }
 
 export interface TrainStop {
+  id?: string;             // stop ID from EMMA API
   name: string;
   scheduledArrival?: Date;
   actualArrival?: Date;
@@ -52,6 +53,7 @@ export interface TrainStop {
   arrivalDelay: number;    // in minutes
   departureDelay: number;  // in minutes
   isPassed: boolean;       // whether train has already passed this stop
+  coordinates?: Coordinates; // GPS coordinates from EMMA API
 }
 
 export interface TrainDetails {
@@ -80,6 +82,12 @@ export interface EnhancedTrainDetails {
     totalDistance?: number;
   };
   status: 'moving' | 'stopped' | 'delayed' | 'on_time';
+}
+
+export interface RouteDetails {
+  gtfsId: string;
+  geometry: string; // The encoded polyline string from the MÁV geometry API
+  stops: TrainStop[]; // The existing TrainStop[] type from the MÁV trip details API
 }
 
 export interface Stop {

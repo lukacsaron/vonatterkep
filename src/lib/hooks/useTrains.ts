@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { io, Socket } from 'socket.io-client';
-import { Train, Departure, TrainSearchResult } from '@/types';
+import { Train, Departure, TrainSearchResult, RouteDetails } from '@/types';
 import { api } from '@/lib/api/client';
 
 export function useTrains() {
@@ -56,6 +56,16 @@ export function useTrain(trainId: string | null) {
     queryFn: () => api.get<Train>(`/trains/${trainId}`),
     enabled: !!trainId,
     refetchInterval: 10000, // 10 seconds
+  });
+}
+
+export function useTrainRoute(gtfsId: string | null) {
+  return useQuery({
+    queryKey: ['train-route', gtfsId],
+    queryFn: () => api.get<RouteDetails>(`/trains/${gtfsId}/route-details`),
+    enabled: !!gtfsId, // Only run the query if a gtfsId is provided
+    staleTime: 5 * 60 * 1000, // Data is stale after 5 minutes, matching the backend cache
+    refetchOnWindowFocus: false, // Route data is static for a trip, no need to refetch on focus
   });
 }
 
