@@ -417,7 +417,7 @@ class MavApiClient {
         return null;
       }
 
-      const data = await response.json();
+      const data = await response.json() as { points?: string };
       console.log(`✅ Got geometry for ${gtfsId}: ${data.points ? 'polyline present' : 'no polyline'}`);
       
       return data.points || null; // The encoded polyline string
