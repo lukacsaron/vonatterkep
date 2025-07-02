@@ -491,7 +491,7 @@ function TrainMapComponent() {
         'line-width': 3,
         'line-dasharray': [2, 1] // Dashed line
       }
-    });
+    }, 'train-arrows'); // Insert before train layers to ensure trains appear on top
 
     // Create GeoJSON for stops
     const currentTime = new Date();
@@ -549,7 +549,7 @@ function TrainMapComponent() {
         'circle-stroke-width': 1,
         'circle-stroke-color': '#6b7280'
       }
-    });
+    }, 'train-arrows');
 
     // Layer for upcoming stops (blue, larger)
     mapInstance.addLayer({
@@ -566,7 +566,7 @@ function TrainMapComponent() {
         'circle-stroke-width': 2,
         'circle-stroke-color': '#ffffff'
       }
-    });
+    }, 'train-arrows');
 
     // Layer for next stop (pulsing animation)
     mapInstance.addLayer({
@@ -581,7 +581,7 @@ function TrainMapComponent() {
         'circle-stroke-color': '#ffffff',
         'circle-opacity': 0.8
       }
-    });
+    }, 'train-arrows');
 
     // Enhanced ETA Label System - Progressive UX Approach
     
@@ -762,23 +762,8 @@ function TrainMapComponent() {
     });
 
     // Fit bounds to show the entire route with improved padding
-    if (decodedPath.length > 0) {
-      const bounds = decodedPath.reduce((bounds, coord) => {
-        return bounds.extend(coord as [number, number]);
-      }, new mapboxgl.LngLatBounds(decodedPath[0] as [number, number], decodedPath[0] as [number, number]));
-
-      // Smart padding based on screen size
-      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-      const padding = isMobile 
-        ? { top: 80, bottom: 100, left: 20, right: 20 } // More space for mobile UI
-        : { top: 60, bottom: 60, left: 60, right: 350 }; // Account for desktop sidebar
-
-      mapInstance.fitBounds(bounds, {
-        padding,
-        duration: 1500,
-        maxZoom: 14 // Prevent over-zooming on short routes
-      });
-    }
+    // Route is now displayed without adjusting map bounds
+    // This keeps the map focused on the train position rather than zooming out to show the entire route
 
     // Cleanup function with event listener removal
     return () => {
