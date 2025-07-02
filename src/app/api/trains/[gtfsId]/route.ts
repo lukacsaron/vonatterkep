@@ -43,9 +43,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             // Convert TrainDetails to route format that the UI expects
             const route = trainDetails.stops.map(stop => ({
               station: {
-                id: '',
+                id: stop.id || '',
                 name: stop.name,
-                coordinates: { latitude: 0, longitude: 0 }
+                coordinates: stop.coordinates || { latitude: 0, longitude: 0 }
               },
               arrival: stop.scheduledArrival,
               departure: stop.scheduledDeparture,

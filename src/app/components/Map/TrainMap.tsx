@@ -4,13 +4,13 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useMapStore, useLocationStore } from '@/lib/store';
-import { useTrains } from '@/lib/hooks/useTrains';
+import { useTrains, useTrainRoute } from '@/lib/hooks/useTrains';
 import { TrainInfoModal } from '../Train/TrainInfoModal';
 import { LoadingSpinner } from '../UI/LoadingSpinner';
 import { DelayLegend } from '../UI/DelayLegend';
 import { LocationButton } from '../UI/LocationButton';
 import { Train, DelayCategory } from '@/types';
-import { getDelayCategory, getDelayColor } from '@/lib/utils';
+import { getDelayCategory, getDelayColor, decodePolyline, formatTime } from '@/lib/utils';
 // --- ADDED: Import RefreshCw icon and cn utility ---
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -29,6 +29,8 @@ function TrainMapComponent() {
   const { selectedTrain, focusedTrain, setSelectedTrain, setFocusedTrain, setBounds } = useMapStore();
   // --- CHANGED: Destructure `isFetching` and `refetch` from the useTrains hook ---
   const { data: trains, isLoading, isFetching, error, refetch } = useTrains();
+  // Hook for fetching train route details
+  const { data: routeDetails } = useTrainRoute(selectedTrain?.gtfsId || null);
   
   // Location store hooks
   const { userLocation, isCentered, setIsCentered } = useLocationStore();
@@ -408,6 +410,375 @@ function TrainMapComponent() {
       map.current.setLayoutProperty(layerId, 'visibility', showRailwayOverlay ? 'visible' : 'none');
     }
   }, [showRailwayOverlay, mapReady]);
+
+  // Handle train route visualization
+  useEffect(() => {
+    if (!map.current || !mapReady) return;
+
+    const mapInstance = map.current;
+
+    // Clean up previous route layers
+    const cleanupRouteLayers = () => {
+      // Remove all route layers if they exist (enhanced layer system)
+      [
+        'route-line', 
+        'route-stops-passed', 
+        'route-stops-upcoming', 
+        'route-stops-next', 
+        'route-stop-labels',
+        'route-stop-label-backgrounds',
+        'route-stop-labels-primary',
+        'route-stop-names',
+        'route-stop-delay-indicators'
+      ].forEach(layerId => {
+        if (mapInstance.getLayer(layerId)) {
+          mapInstance.removeLayer(layerId);
+        }
+      });
+      // Remove route sources if they exist
+      ['route-line-source', 'route-stops-source'].forEach(sourceId => {
+        if (mapInstance.getSource(sourceId)) {
+          mapInstance.removeSource(sourceId);
+        }
+      });
+    };
+
+    // Always clean up first
+    cleanupRouteLayers();
+
+    // If no route details, we're done
+    if (!routeDetails) return;
+
+    console.log('🗺️ Rendering route for train:', selectedTrain?.number, {
+      geometryLength: routeDetails.geometry.length,
+      stopsCount: routeDetails.stops.length,
+      stopsWithCoordinates: routeDetails.stops.filter(s => s.coordinates).length,
+      sampleStopCoordinates: routeDetails.stops.slice(0, 3).map(s => ({ 
+        name: s.name, 
+        coords: s.coordinates 
+      }))
+    });
+
+    // Decode the polyline
+    const decodedPath = decodePolyline(routeDetails.geometry);
+    
+    // Create GeoJSON for the route line
+    const routeLineGeoJSON = {
+      type: 'Feature' as const,
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: decodedPath
+      },
+      properties: {}
+    };
+
+    // Add route line source and layer
+    mapInstance.addSource('route-line-source', {
+      type: 'geojson',
+      data: routeLineGeoJSON
+    });
+
+    mapInstance.addLayer({
+      id: 'route-line',
+      type: 'line',
+      source: 'route-line-source',
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
+      paint: {
+        'line-color': '#2563eb', // Blue color
+        'line-width': 3,
+        'line-dasharray': [2, 1] // Dashed line
+      }
+    }, 'train-arrows'); // Insert before train layers to ensure trains appear on top
+
+    // Create GeoJSON for stops
+    const currentTime = new Date();
+    const stopFeatures = routeDetails.stops
+      .filter(stop => {
+        // Only include stops that have GPS coordinates
+        return stop.coordinates && stop.coordinates.latitude && stop.coordinates.longitude;
+      })
+      .map((stop, originalIndex) => {
+        // Find the original index of this stop in the full stops array
+        const fullStopIndex = routeDetails.stops.findIndex(s => s.id === stop.id || s.name === stop.name);
+        const isNextStop = !stop.isPassed && 
+          (fullStopIndex === 0 || routeDetails.stops[fullStopIndex - 1]?.isPassed);
+        
+        return {
+          type: 'Feature' as const,
+          geometry: {
+            type: 'Point' as const,
+            // Use actual GPS coordinates from EMMA API
+            coordinates: [stop.coordinates!.longitude, stop.coordinates!.latitude]
+          },
+          properties: {
+            name: stop.name,
+            isPassed: stop.isPassed,
+            isNextStop,
+            eta: stop.scheduledArrival ? formatTime(stop.scheduledArrival) : '',
+            delay: stop.arrivalDelay,
+            platform: stop.platform || '',
+            stopId: stop.id || ''
+          }
+        };
+      });
+
+    const stopsGeoJSON = {
+      type: 'FeatureCollection' as const,
+      features: stopFeatures
+    };
+
+    // Add stops source
+    mapInstance.addSource('route-stops-source', {
+      type: 'geojson',
+      data: stopsGeoJSON
+    });
+
+    // Layer for passed stops (gray, smaller)
+    mapInstance.addLayer({
+      id: 'route-stops-passed',
+      type: 'circle',
+      source: 'route-stops-source',
+      filter: ['==', ['get', 'isPassed'], true],
+      paint: {
+        'circle-radius': 4,
+        'circle-color': '#9ca3af', // Gray
+        'circle-opacity': 0.6,
+        'circle-stroke-width': 1,
+        'circle-stroke-color': '#6b7280'
+      }
+    }, 'train-arrows');
+
+    // Layer for upcoming stops (blue, larger)
+    mapInstance.addLayer({
+      id: 'route-stops-upcoming',
+      type: 'circle',
+      source: 'route-stops-source',
+      filter: ['all', 
+        ['==', ['get', 'isPassed'], false],
+        ['==', ['get', 'isNextStop'], false]
+      ],
+      paint: {
+        'circle-radius': 6,
+        'circle-color': '#2563eb', // Blue
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff'
+      }
+    }, 'train-arrows');
+
+    // Layer for next stop (pulsing animation)
+    mapInstance.addLayer({
+      id: 'route-stops-next',
+      type: 'circle',
+      source: 'route-stops-source',
+      filter: ['==', ['get', 'isNextStop'], true],
+      paint: {
+        'circle-radius': 8,
+        'circle-color': '#2563eb', // Blue
+        'circle-stroke-width': 3,
+        'circle-stroke-color': '#ffffff',
+        'circle-opacity': 0.8
+      }
+    }, 'train-arrows');
+
+    // Enhanced ETA Label System - Progressive UX Approach
+    
+    // 1. Background pills for ETA labels (high contrast foundation)
+    mapInstance.addLayer({
+      id: 'route-stop-label-backgrounds',
+      type: 'circle',
+      source: 'route-stops-source',
+      filter: ['all',
+        ['==', ['get', 'isPassed'], false],
+        ['!=', ['get', 'eta'], ''] // Only show if we have ETA data
+      ],
+      layout: {},
+      paint: {
+        // Adaptive sizing based on zoom level for better visibility
+        'circle-radius': [
+          'interpolate', ['linear'], ['zoom'],
+          8, 14,  // At zoom 8: 14px radius
+          12, 18, // At zoom 12: 18px radius  
+          16, 22  // At zoom 16: 22px radius
+        ],
+        // High-contrast background with status color coding
+        'circle-color': ['case',
+          ['>', ['get', 'delay'], 0], '#dc2626', // Strong red for delayed
+          '#059669' // Strong green for on-time
+        ],
+        'circle-opacity': 0.95,
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-opacity': 1
+      }
+    });
+
+    // 2. Primary ETA text (large, high contrast)
+    mapInstance.addLayer({
+      id: 'route-stop-labels-primary',
+      type: 'symbol',
+      source: 'route-stops-source',
+      filter: ['all',
+        ['==', ['get', 'isPassed'], false],
+        ['!=', ['get', 'eta'], '']
+      ],
+      layout: {
+        'text-field': ['get', 'eta'],
+        // Zoom-adaptive text sizing for optimal readability
+        'text-size': [
+          'interpolate', ['linear'], ['zoom'],
+          8, 11,  // At zoom 8: 11px
+          12, 14, // At zoom 12: 14px  
+          16, 16  // At zoom 16: 16px
+        ],
+        'text-offset': [0, 0], // Centered on the background pill
+        'text-anchor': 'center',
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'], // Bold font for visibility
+        'text-allow-overlap': false, // Smart collision detection
+        'text-ignore-placement': false
+      },
+      paint: {
+        'text-color': '#ffffff', // Always white for maximum contrast
+        'text-opacity': 1
+      }
+    });
+
+    // 3. Station name labels for context (shown at higher zoom levels)
+    mapInstance.addLayer({
+      id: 'route-stop-names',
+      type: 'symbol',
+      source: 'route-stops-source',
+      filter: ['all',
+        ['==', ['get', 'isPassed'], false],
+        ['!=', ['get', 'eta'], '']
+      ],
+      minzoom: 11, // Only show station names when zoomed in enough
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-size': [
+          'interpolate', ['linear'], ['zoom'],
+          11, 10, // At zoom 11: 10px
+          16, 12  // At zoom 16: 12px
+        ],
+        'text-offset': [0, 2.5], // Position below the ETA
+        'text-anchor': 'top',
+        'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular'],
+        'text-max-width': 8, // Wrap long station names
+        'text-allow-overlap': false
+      },
+      paint: {
+        'text-color': '#374151', // Dark gray
+        'text-halo-color': '#ffffff',
+        'text-halo-width': 3,
+        'text-halo-blur': 1
+      }
+    });
+
+    // 4. Delay indicator badges for delayed trains (additional progressive enhancement)
+    mapInstance.addLayer({
+      id: 'route-stop-delay-indicators',
+      type: 'symbol',
+      source: 'route-stops-source',
+      filter: ['all',
+        ['==', ['get', 'isPassed'], false],
+        ['>', ['get', 'delay'], 0] // Only for delayed stops
+      ],
+      layout: {
+        'text-field': [
+          'concat', 
+          '+', 
+          ['to-string', ['get', 'delay']], 
+          ' min'
+        ],
+        'text-size': [
+          'interpolate', ['linear'], ['zoom'],
+          8, 8,   // At zoom 8: 8px
+          12, 10, // At zoom 12: 10px  
+          16, 11  // At zoom 16: 11px
+        ],
+        'text-offset': [0, -2.2], // Position above the ETA
+        'text-anchor': 'bottom',
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold']
+      },
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': '#dc2626',
+        'text-halo-width': 3
+      }
+    });
+
+    // Interactive enhancements for progressive UX
+    
+    // Event handler functions (defined outside for proper cleanup)
+    const handleMouseEnter = () => {
+      mapInstance.getCanvas().style.cursor = 'pointer';
+    };
+    
+    const handleMouseLeave = () => {
+      mapInstance.getCanvas().style.cursor = '';
+    };
+
+    // Enhanced click handler for stop details
+    const handleStopClick = (e: any) => {
+      if (e.features && e.features[0]) {
+        const feature = e.features[0];
+        const stopName = feature.properties?.name;
+        const eta = feature.properties?.eta;
+        const delay = feature.properties?.delay || 0;
+        const platform = feature.properties?.platform;
+        
+        // Create rich popup content
+        const popupContent = `
+          <div style="padding: 8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+            <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #1f2937;">${stopName}</h3>
+            <div style="font-size: 13px; color: #4b5563;">
+              <div style="margin-bottom: 4px;">
+                <strong>Érkezés:</strong> <span style="color: ${delay > 0 ? '#dc2626' : '#059669'};">${eta}</span>
+              </div>
+              ${delay > 0 ? `<div style="margin-bottom: 4px; color: #dc2626;"><strong>Késés:</strong> +${delay} perc</div>` : ''}
+              ${platform ? `<div style="color: #6b7280;"><strong>Vágány:</strong> ${platform}</div>` : ''}
+            </div>
+          </div>
+        `;
+        
+        new mapboxgl.Popup({
+          closeButton: true,
+          closeOnClick: true,
+          offset: [0, -10]
+        })
+        .setLngLat(e.lngLat)
+        .setHTML(popupContent)
+        .addTo(mapInstance);
+      }
+    };
+    
+    // Add event listeners to interactive elements
+    ['route-stop-label-backgrounds', 'route-stop-labels-primary'].forEach(layerId => {
+      mapInstance.on('mouseenter', layerId, handleMouseEnter);
+      mapInstance.on('mouseleave', layerId, handleMouseLeave);
+      mapInstance.on('click', layerId, handleStopClick);
+    });
+
+    // Fit bounds to show the entire route with improved padding
+    // Route is now displayed without adjusting map bounds
+    // This keeps the map focused on the train position rather than zooming out to show the entire route
+
+    // Cleanup function with event listener removal
+    return () => {
+      // Remove event listeners before cleaning up layers
+      ['route-stop-label-backgrounds', 'route-stop-labels-primary'].forEach(layerId => {
+        if (mapInstance.getLayer(layerId)) {
+          mapInstance.off('mouseenter', layerId, handleMouseEnter);
+          mapInstance.off('mouseleave', layerId, handleMouseLeave);
+          mapInstance.off('click', layerId, handleStopClick);
+        }
+      });
+      
+      cleanupRouteLayers();
+    };
+  }, [routeDetails, mapReady, selectedTrain]);
 
   // Handle user location and marker
   useEffect(() => {

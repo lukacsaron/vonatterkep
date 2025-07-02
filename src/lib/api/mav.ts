@@ -359,6 +359,7 @@ class MavApiClient {
         }
 
         return {
+          id: stoptime.stop.id, // Stop ID from EMMA API
           name: stoptime.stop.name,
           scheduledArrival,
           actualArrival: realtimeArrival,
@@ -367,7 +368,11 @@ class MavApiClient {
           platform: stoptime.stop.platformCode || '', // Now available from EMMA API
           arrivalDelay: Math.round(arrivalDelay / 60), // Convert to minutes
           departureDelay: 0, // Not available
-          isPassed
+          isPassed,
+          coordinates: stoptime.stop.lat && stoptime.stop.lon ? {
+            latitude: stoptime.stop.lat,
+            longitude: stoptime.stop.lon
+          } : undefined // GPS coordinates from EMMA API
         };
       });
 
@@ -390,6 +395,36 @@ class MavApiClient {
   async getTrainDelay(gtfsId: string): Promise<number> {
     const details = await this.getTrainDetails(gtfsId);
     return details?.overallDelay || 0;
+  }
+
+  // Get train route geometry (polyline) for map visualization
+  async getTrainGeometry(gtfsId: string): Promise<string | null> {
+    try {
+      const url = `https://emma.mav.hu/otp2-backend/otp/routers/default/index/trips/${gtfsId}/geometry`;
+      console.log(`🗺️ Fetching route geometry for ${gtfsId}`);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'User-Agent': MAV_USER_AGENT,
+        }
+      });
+
+      console.log(`📶 Geometry API Response status: ${response.status}`);
+
+      if (!response.ok) {
+        console.warn(`❌ Failed to get geometry for ${gtfsId}: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json() as { points?: string };
+      console.log(`✅ Got geometry for ${gtfsId}: ${data.points ? 'polyline present' : 'no polyline'}`);
+      
+      return data.points || null; // The encoded polyline string
+    } catch (error) {
+      console.error(`Failed to get geometry for ${gtfsId}:`, error);
+      return null;
+    }
   }
 
   // Search for trains based on various criteria

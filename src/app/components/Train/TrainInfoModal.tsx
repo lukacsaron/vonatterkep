@@ -40,9 +40,9 @@ export function TrainInfoModal({ train, onClose }: TrainInfoModalProps) {
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      handleClose();
-    }
+    // Don't close modal on backdrop click for desktop - only via X button
+    // This allows users to interact with the map while keeping the modal open
+    return;
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -86,69 +86,47 @@ export function TrainInfoModal({ train, onClose }: TrainInfoModalProps) {
   if (!isMounted || !train) return null;
 
   const modalContent = (
-    <div 
-      className={`fixed inset-0 z-50 transition-all duration-300 ${
-        isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
-      }`}
-      style={{
-        // Ensure full viewport coverage on mobile
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        margin: 0,
-        padding: 0
-      }}
-    >
-      {/* Desktop backdrop */}
+    <>
+      {/* Mobile: Bottom sheet - covers full screen */}
       <div 
-        className="hidden md:block absolute inset-0 bg-black bg-opacity-50"
-        onClick={handleBackdropClick}
-      />
+        className={`md:hidden fixed inset-0 z-50 transition-all duration-300 ${
+          isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        <div className="flex items-end justify-start h-full w-full">
+          <div 
+            className={`w-full transition-transform duration-300 ${
+              isVisible ? 'translate-y-0' : 'translate-y-full'
+            }`}
+            style={{
+              height: '100vh',
+              maxHeight: '100vh',
+              margin: 0,
+              padding: 0
+            }}
+            onTouchStart={handleTouchStart}
+          >
+            <TrainInfoCard train={train} onClose={handleClose} disableClickOutside={true} />
+          </div>
+        </div>
+      </div>
       
-      {/* Mobile backdrop */}
+      {/* Desktop: Side modal - only covers right side */}
       <div 
-        className="md:hidden absolute inset-0 bg-black bg-opacity-30"
-        onClick={handleBackdropClick}
-        style={{ margin: 0, padding: 0 }}
-      />
-      
-      {/* Modal container */}
-      <div 
-        className="flex items-end md:items-center justify-start md:justify-end h-full w-full"
+        className={`hidden md:block fixed top-0 right-0 bottom-0 z-50 transition-all duration-300 ${
+          isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
+        }`}
         style={{ 
-          margin: 0, 
-          padding: '0',
-          // On desktop add padding
-          ...(typeof window !== 'undefined' && window.innerWidth >= 768 ? { padding: '1rem' } : {})
+          width: 'auto',
+          maxWidth: '400px',
+          padding: '1rem'
         }}
       >
-        {/* Mobile: Bottom sheet */}
-        <div 
-          className={`md:hidden w-full transition-transform duration-300 ${
-            isVisible ? 'translate-y-0' : 'translate-y-full'
-          }`}
-          style={{
-            height: '100vh',
-            maxHeight: '100vh',
-            margin: 0,
-            padding: 0
-          }}
-          onTouchStart={handleTouchStart}
-        >
-          <TrainInfoCard train={train} onClose={handleClose} disableClickOutside={true} />
-        </div>
-        
-        {/* Desktop: Side modal */}
-        <div 
-          className={`hidden md:block transition-all duration-300 ${
-            isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
-          }`}
-        >
+        <div className="h-full flex items-center justify-end">
           <TrainInfoCard train={train} onClose={handleClose} disableClickOutside={true} />
         </div>
       </div>
-    </div>
+    </>
   );
 
   return createPortal(modalContent, document.body);
