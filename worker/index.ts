@@ -11,6 +11,7 @@ import { Train, TrainDetails } from '../src/types';
 const { redisClient } = require('../src/lib/redis');
 
 const FETCH_INTERVAL_MS = parseInt(process.env.WORKER_FETCH_INTERVAL_MS || '25000', 10);
+const USE_FALLBACK_MODE = process.env.MAV_USE_FALLBACK === 'true' || process.env.NODE_ENV === 'production';
 const CACHE_KEY = 'cache:trains:live';
 const HASH_KEY = 'trains:live';
 const ROUTE_CACHE_KEY = 'cache:routes';
@@ -78,6 +79,12 @@ async function fetchRouteDetailsWithCache(gtfsId: string): Promise<TrainDetails 
   if (cachedRoute) {
     console.log(`✅ Cache hit for ${gtfsId}`);
     return cachedRoute;
+  }
+
+  // Skip API calls in fallback mode
+  if (USE_FALLBACK_MODE) {
+    console.log(`⏭️ Skipping API call for ${gtfsId} (fallback mode active)`);
+    return null;
   }
 
   console.log(`❌ Cache miss for ${gtfsId}, fetching from API`);
