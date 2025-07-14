@@ -196,11 +196,17 @@ async function runFetchCycle() {
         // 3. Write to Redis cache using HASH for better performance
         // First, get current train IDs to clean up removed trains
         const currentTrainIds = await redisClient.hKeys(HASH_KEY);
-        const newTrainIds = new Set(trains.map(t => t.gtfsId));
+        // Filter out trains without valid gtfsId to prevent Redis errors
+        const trainsWithValidIds = trains.filter(t => t.gtfsId && typeof t.gtfsId === 'string' && t.gtfsId.trim() !== '');
+        if (trainsWithValidIds.length === 0) {
+            console.warn('No trains with valid gtfsId found. Cache will not be updated.');
+            return;
+        }
+        const newTrainIds = new Set(trainsWithValidIds.map(t => t.gtfsId));
         // Prepare pipeline for atomic operations
         const pipeline = redisClient.multi();
         // Add/update all trains in the HASH
-        for (const train of trains) {
+        for (const train of trainsWithValidIds) {
             pipeline.hSet(HASH_KEY, train.gtfsId, JSON.stringify(train));
         }
         // Remove trains that are no longer in the response

@@ -6,6 +6,13 @@ exports.transformMavDeparture = transformMavDeparture;
 exports.transformMavArrival = transformMavArrival;
 exports.transformSearchResult = transformSearchResult;
 const types_1 = require("../../types");
+// Speed conversion utilities
+function msToKmh(speedMs) {
+    return speedMs * 3.6;
+}
+function kmhToMs(speedKmh) {
+    return speedKmh / 3.6;
+}
 function transformMavStation(mavStation) {
     var _a, _b;
     return {
@@ -69,7 +76,7 @@ function transformMavTrain(mavTrain, trainDetails) {
             latitude: ((_b = mavTrain.UtolsoGPS) === null || _b === void 0 ? void 0 : _b.Lat) || 0,
             longitude: ((_c = mavTrain.UtolsoGPS) === null || _c === void 0 ? void 0 : _c.Lng) || 0
         },
-        speed: ((_d = mavTrain.UtolsoGPS) === null || _d === void 0 ? void 0 : _d.Sebesseg) || 0,
+        speed: msToKmh(((_d = mavTrain.UtolsoGPS) === null || _d === void 0 ? void 0 : _d.Sebesseg) || 0),
         heading: ((_e = mavTrain.UtolsoGPS) === null || _e === void 0 ? void 0 : _e.Irany) || 0,
         delay: mavTrain.Keses || 0,
         origin,
@@ -78,7 +85,7 @@ function transformMavTrain(mavTrain, trainDetails) {
         gtfsId: mavTrain.gtfsId,
         trainName: mavTrain.trainName || (trainDetails === null || trainDetails === void 0 ? void 0 : trainDetails.trainName),
         lastUpdate: ((_f = mavTrain.UtolsoGPS) === null || _f === void 0 ? void 0 : _f.Ido) ? new Date(mavTrain.UtolsoGPS.Ido) : new Date(),
-        isMoving: (((_g = mavTrain.UtolsoGPS) === null || _g === void 0 ? void 0 : _g.Sebesseg) || 0) > 5, // Consider moving if speed > 5 km/h
+        isMoving: (((_g = mavTrain.UtolsoGPS) === null || _g === void 0 ? void 0 : _g.Sebesseg) || 0) > kmhToMs(5), // Consider moving if speed > 5 km/h (converted to m/s)
         // UIC locomotive type detection
         locomotiveType: mavTrain.locomotiveType,
         uicInfo: mavTrain.uicInfo

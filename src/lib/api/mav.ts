@@ -3,8 +3,8 @@ import { TrainDetails, TrainStop } from '../../types';
 import { parseUIC } from '../uicParser';
 
 // Constants from reference implementations
-const MAV_MOBILE_API_BASE = 'http://vim.mav-start.hu/VIM/PR/150225/MobileService.svc/rest';
-const MAV_EMMA_API_BASE = 'https://emma.mav.hu/otp2-backend/otp/routers/default/index/graphql'; // Correct endpoint from holavonat-app
+const MAV_MOBILE_API_BASE = 'https://vim.mav-start.hu/VIM/PR/150225/MobileService.svc/rest';
+const MAV_EMMA_API_BASE = 'https://emma.mav.hu/otp2-backend/otp/routers/default/index/graphql'; // Working EMMA endpoint
 
 // Authentication tokens from reference implementations
 const MAV_UAID = '2Juija1mabqr24Blkx1qkXxJ105j'; // From mav library
@@ -75,6 +75,9 @@ class MavApiClient {
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': MAV_USER_AGENT,
+          'Accept': 'application/json',
+          'Origin': 'https://elvira.mav-start.hu',
+          'Referer': 'https://elvira.mav-start.hu/',
         },
         body: JSON.stringify(payload)
       });
@@ -234,6 +237,10 @@ class MavApiClient {
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': MAV_USER_AGENT,
+          'Referer': 'https://emma.mav.hu/',
+          'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"macOS"',
         },
         body: JSON.stringify({ query: tripQuery })
       });
@@ -407,6 +414,10 @@ class MavApiClient {
         method: 'GET',
         headers: {
           'User-Agent': MAV_USER_AGENT,
+          'Referer': 'https://emma.mav.hu/',
+          'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"macOS"',
         }
       });
 
@@ -615,6 +626,10 @@ class MavApiClient {
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': MAV_USER_AGENT,
+          'Referer': 'https://emma.mav.hu/',
+          'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"macOS"',
         },
         body: JSON.stringify(payload)
       });
@@ -806,6 +821,7 @@ class MavApiClient {
   // Fallback data when APIs are unavailable
   private getFallbackTrains(): MavTrain[] {
     console.log('🔄 Using fallback train data (MÁV APIs unavailable)');
+    const currentDate = new Date().toISOString().split('T')[0].replace(/-/g, '');
     return [
       {
         VonatSzam: '3201',
@@ -818,7 +834,8 @@ class MavApiClient {
           Sebesseg: 85,
           Irany: 45
         },
-        Keses: 3
+        Keses: 3,
+        gtfsId: `3201_${currentDate}_1` // Add valid gtfsId
       },
       {
         VonatSzam: '4521',
@@ -831,7 +848,8 @@ class MavApiClient {
           Sebesseg: 62,
           Irany: 180
         },
-        Keses: 12
+        Keses: 12,
+        gtfsId: `4521_${currentDate}_1` // Add valid gtfsId
       },
       {
         VonatSzam: '8901',
@@ -844,7 +862,8 @@ class MavApiClient {
           Sebesseg: 35,
           Irany: 270
         },
-        Keses: 0
+        Keses: 0,
+        gtfsId: `8901_${currentDate}_1` // Add valid gtfsId
       }
     ];
   }
@@ -855,6 +874,7 @@ class MavApiClient {
     
     // Generate more realistic train positions and data
     const currentTime = new Date();
+    const currentDate = currentTime.toISOString().split('T')[0].replace(/-/g, '');
     const trains: MavTrain[] = [];
     
     // Add some IC trains
@@ -869,7 +889,8 @@ class MavApiClient {
         Sebesseg: 80 + Math.random() * 40,
         Irany: Math.random() * 360
       },
-      Keses: Math.floor(Math.random() * 15)
+      Keses: Math.floor(Math.random() * 15),
+      gtfsId: `406_${currentDate}_1` // Add valid gtfsId
     });
 
     trains.push({
@@ -883,13 +904,15 @@ class MavApiClient {
         Sebesseg: 70 + Math.random() * 50,
         Irany: Math.random() * 360
       },
-      Keses: Math.floor(Math.random() * 20)
+      Keses: Math.floor(Math.random() * 20),
+      gtfsId: `412_${currentDate}_1` // Add valid gtfsId
     });
 
     // Add regional trains
     for (let i = 0; i < 8; i++) {
+      const trainNum = (6000 + Math.floor(Math.random() * 1000)).toString();
       trains.push({
-        VonatSzam: (6000 + Math.floor(Math.random() * 1000)).toString(),
+        VonatSzam: trainNum,
         Tipus: 'REG',
         Celallomas: ['Pécs', 'Győr', 'Miskolc', 'Szolnok', 'Békéscsaba'][Math.floor(Math.random() * 5)],
         UtolsoGPS: {
@@ -899,7 +922,8 @@ class MavApiClient {
           Sebesseg: 30 + Math.random() * 60,
           Irany: Math.random() * 360
         },
-        Keses: Math.floor(Math.random() * 30)
+        Keses: Math.floor(Math.random() * 30),
+        gtfsId: `${trainNum}_${currentDate}_1` // Add valid gtfsId
       });
     }
 
