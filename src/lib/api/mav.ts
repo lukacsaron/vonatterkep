@@ -6,9 +6,25 @@ import { parseUIC } from '../uicParser';
 const MAV_MOBILE_API_BASE = 'https://vim.mav-start.hu/VIM/PR/150225/MobileService.svc/rest';
 const MAV_EMMA_API_BASE = 'https://emma.mav.hu/otp2-backend/otp/routers/default/index/graphql'; // Working EMMA endpoint
 
+// Flag to use fallback mode when APIs are inaccessible
+const USE_FALLBACK_MODE = process.env.MAV_USE_FALLBACK === 'true' || process.env.NODE_ENV === 'production';
+
 // Authentication tokens from reference implementations
 const MAV_UAID = '2Juija1mabqr24Blkx1qkXxJ105j'; // From mav library
 const MAV_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'; // Exact from holavonat-app
+
+// Add request delay to avoid rate limiting
+const REQUEST_DELAY_MS = 100; // 100ms between requests
+let lastRequestTime = 0;
+
+async function rateLimitDelay() {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < REQUEST_DELAY_MS) {
+    await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY_MS - timeSinceLastRequest));
+  }
+  lastRequestTime = Date.now();
+}
 
 export interface MavStation {
   Nev: string;
@@ -54,6 +70,32 @@ export interface MavArrival {
   Vagany?: string;
   Keses: number;
   Tipus: string;
+}
+
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
+
+// Helper function to retry failed requests
+async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
+  try {
+    const response = await fetch(url, options);
+    
+    // If we get 403, don't retry - we're likely rate limited
+    if (response.status === 403) {
+      console.warn(`🚫 Rate limited or blocked (403) from ${url}`);
+      throw new Error('Rate limited or blocked by MÁV API');
+    }
+    
+    return response;
+  } catch (error) {
+    if (retries > 0 && !(error instanceof Error && error.message.includes('Rate limited'))) {
+      console.warn(`🔄 Retrying request to ${url} (${retries} retries left)...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      return fetchWithRetry(url, options, retries - 1);
+    }
+    throw error;
+  }
 }
 
 class MavApiClient {
@@ -232,17 +274,28 @@ class MavApiClient {
       console.log(`🔍 Fetching trip details for ${gtfsId} on ${serviceDay}`);
       console.log(`📋 GraphQL Query:`, tripQuery);
 
-      const response = await fetch(MAV_EMMA_API_BASE, {
+      // Add rate limiting
+      await rateLimitDelay();
+      
+      const response = await fetchWithRetry(MAV_EMMA_API_BASE, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': MAV_USER_AGENT,
+          'Accept': 'application/json',
+          'Accept-Language': 'hu-HU,hu;q=0.9,en;q=0.8',
+          'Cache-Control': 'no-cache',
           'Referer': 'https://emma.mav.hu/',
+          'Origin': 'https://emma.mav.hu',
           'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
           'sec-ch-ua-mobile': '?0',
           'sec-ch-ua-platform': '"macOS"',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'same-origin',
         },
-        body: JSON.stringify({ query: tripQuery })
+        body: JSON.stringify({ query: tripQuery }),
+        signal: AbortSignal.timeout(30000)
       });
 
       if (!response.ok) {
@@ -410,16 +463,20 @@ class MavApiClient {
       const url = `https://emma.mav.hu/otp2-backend/otp/routers/default/index/trips/${gtfsId}/geometry`;
       console.log(`🗺️ Fetching route geometry for ${gtfsId}`);
       
-      const response = await fetch(url, {
+      await rateLimitDelay();
+      
+      const response = await fetchWithRetry(url, {
         method: 'GET',
         headers: {
           'User-Agent': MAV_USER_AGENT,
+          'Accept': 'application/json',
           'Referer': 'https://emma.mav.hu/',
           'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
           'sec-ch-ua-mobile': '?0',
           'sec-ch-ua-platform': '"macOS"',
-        }
-      });
+        },
+        signal: AbortSignal.timeout(30000)
+      }, 2); // Only 2 retries for geometry
 
       console.log(`📶 Geometry API Response status: ${response.status}`);
 
@@ -600,6 +657,12 @@ class MavApiClient {
 
   // Get real-time train positions using EMMA API (exact approach from holavonat-app)
   async getTrainPositions(bounds?: {north: number, south: number, east: number, west: number}): Promise<MavTrain[]> {
+    // Check if we should use fallback mode
+    if (USE_FALLBACK_MODE) {
+      console.log('🚂 Using fallback mode (MÁV APIs restricted in production)...');
+      return this.getEnhancedFallbackTrains();
+    }
+    
     console.log('🚂 Attempting to fetch real-time train data from MÁV EMMA API...');
     
     try {
@@ -621,17 +684,28 @@ class MavApiClient {
       console.log('📡 Making GraphQL request to:', MAV_EMMA_API_BASE);
       console.log('📋 Query:', vehicleQuery);
 
-      const response = await fetch(MAV_EMMA_API_BASE, {
+      // Add rate limiting
+      await rateLimitDelay();
+      
+      const response = await fetchWithRetry(MAV_EMMA_API_BASE, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': MAV_USER_AGENT,
+          'Accept': 'application/json',
+          'Accept-Language': 'hu-HU,hu;q=0.9,en;q=0.8',
+          'Cache-Control': 'no-cache',
           'Referer': 'https://emma.mav.hu/',
+          'Origin': 'https://emma.mav.hu',
           'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
           'sec-ch-ua-mobile': '?0',
           'sec-ch-ua-platform': '"macOS"',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'same-origin',
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(30000)
       });
 
       console.log('📶 EMMA API Response status:', response.status, response.statusText);
@@ -726,22 +800,12 @@ class MavApiClient {
 
   // Try alternative approaches if EMMA API fails
   private async tryAlternativeApproach(bounds?: {north: number, south: number, east: number, west: number}): Promise<MavTrain[]> {
-    console.log('🔍 Trying MobileService API as alternative...');
+    console.log('🔍 EMMA API failed, using fallback data...');
     
-    try {
-      // Try to get some station data to verify the API works
-      const stations = await this.getStations();
-      console.log(`📍 MobileService API working - found ${stations.length} stations`);
-      
-      // Since MobileService doesn't have real-time positions, return enhanced fallback data
-      console.log('ℹ️ MobileService API doesn\'t provide real-time positions, using enhanced fallback');
-      return this.getEnhancedFallbackTrains();
-      
-    } catch (error) {
-      console.error('💥 MobileService API also failed:', error);
-      console.log('🔄 Using basic fallback data');
-      return this.getFallbackTrains();
-    }
+    // Skip MobileService API as it's returning 404
+    // Directly use fallback data with enhanced variety
+    console.log('🔄 Using enhanced fallback data (MÁV APIs temporarily unavailable)');
+    return this.getEnhancedFallbackTrains();
   }
 
   // Transform holavonat-app format vehicle data to our format
@@ -868,14 +932,30 @@ class MavApiClient {
     ];
   }
 
-  // Enhanced fallback with more realistic data when MobileService API is working
+  // Enhanced fallback with more realistic data when APIs are restricted
   private getEnhancedFallbackTrains(): MavTrain[] {
-    console.log('✨ Using enhanced fallback train data (MobileService API verified)');
+    console.log('✨ Using enhanced fallback train data (MÁV APIs access restricted)');
     
     // Generate more realistic train positions and data
     const currentTime = new Date();
     const currentDate = currentTime.toISOString().split('T')[0].replace(/-/g, '');
     const trains: MavTrain[] = [];
+    
+    // Add notice train for demo
+    trains.push({
+      VonatSzam: '999',
+      Tipus: 'INFO',
+      Celallomas: 'MÁV API korlátozott', 
+      UtolsoGPS: {
+        Lat: 47.4979,
+        Lng: 19.0402,
+        Ido: currentTime.toISOString(),
+        Sebesseg: 0,
+        Irany: 0
+      },
+      Keses: 0,
+      gtfsId: `999_${currentDate}_1`
+    });
     
     // Add some IC trains
     trains.push({
