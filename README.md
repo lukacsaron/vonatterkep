@@ -68,7 +68,7 @@ Early commits hardcoded a Mapbox public token (`pk.…`) in `src/app/components/
 
 ## Status
 
-Built 23 June to 14 July 2025, 65 commits, then parked. Treat it as a snapshot of a fast build rather than maintained software. `repomix-output.txt` and `dist/` are build leftovers that should not be in version control.
+Built 23 June to 14 July 2025, 65 commits, then parked. Treat it as a snapshot of a fast build rather than maintained software.
 
 ## License
 

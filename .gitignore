@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Compiled worker output
+/dist
+
+# repomix dumps
+repomix-output.txt
