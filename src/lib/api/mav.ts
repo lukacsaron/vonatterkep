@@ -750,7 +750,11 @@ class MavApiClient {
       };
       
       // Basic GraphQL query for vehicle positions (stoptimes need separate calls with serviceDay)
-      const vehicleQuery = `{ vehiclePositions(swLat: ${queryBounds.south}, swLon: ${queryBounds.west}, neLat: ${queryBounds.north}, neLon: ${queryBounds.east}, modes: [RAIL, RAIL_REPLACEMENT_BUS]) { trip { gtfsId tripShortName tripHeadsign } vehicleId lat lon label speed heading } }`;
+      // Delay comes back inline with the positions. Asking each train for its
+      // delay separately meant ~1 request per live train per cycle (~123 of them,
+      // fired as a simultaneous burst), which is what tripped MÁV's per-host
+      // limit. arrivalDelay/departureDelay are seconds.
+      const vehicleQuery = `{ vehiclePositions(swLat: ${queryBounds.south}, swLon: ${queryBounds.west}, neLat: ${queryBounds.north}, neLon: ${queryBounds.east}, modes: [RAIL, RAIL_REPLACEMENT_BUS]) { trip { gtfsId tripShortName tripHeadsign departureStoptime { departureDelay } arrivalStoptime { arrivalDelay } } vehicleId lat lon label speed heading } }`;
 
       const data = await otpGraphQLRequest<{ vehiclePositions: any[] | null }>(vehicleQuery, 'getTrainPositions');
 
@@ -768,62 +772,29 @@ class MavApiClient {
       // Transform to our MavTrain format
       const trains = this.transformHolavonatData(vehicles);
       
-      // Get all trains with gtfsId for delay lookup
-      const trainsWithGtfsId = trains.filter(t => t.gtfsId);
-      console.log(`🔍 Trains with gtfsId: ${trainsWithGtfsId.length}/${trains.length}`);
-
-      // Fetch delays for ALL trains in parallel batches
-      console.log('🔄 Fetching delay information for ALL trains in parallel...');
-      const BATCH_SIZE = 50; // Parallel batch size
-      const batches = [];
-      
-      for (let i = 0; i < trainsWithGtfsId.length; i += BATCH_SIZE) {
-        const batch = trainsWithGtfsId.slice(i, i + BATCH_SIZE);
-        batches.push(batch);
+      // Delay now arrives with the positions query, so there is no second
+      // round of per-train requests. Prefer arrivalDelay (what a passenger
+      // waiting down the line experiences); fall back to departureDelay.
+      const delayMap = new Map<string, number>();
+      for (const vehicle of vehicles) {
+        const trip = vehicle?.trip || {};
+        const key = trip.tripShortName || vehicle?.vehicleId;
+        if (!key) continue;
+        const seconds = trip.arrivalStoptime?.arrivalDelay ?? trip.departureStoptime?.departureDelay;
+        if (typeof seconds !== 'number') continue;
+        delayMap.set(key, Math.max(0, Math.round(seconds / 60)));
       }
 
-      console.log(`📦 Processing ${batches.length} parallel batches of ${BATCH_SIZE} trains each...`);
-      
-      // Process all batches in parallel
-      const batchPromises = batches.map(async (batch, batchIndex) => {
-        console.log(`🔄 Starting batch ${batchIndex + 1}/${batches.length}...`);
-        
-        const batchResults = await Promise.allSettled(
-          batch.map(async (train) => {
-            const delay = await this.getTrainDelay(train.gtfsId!);
-            return { trainId: train.VonatSzam, delay };
-          })
-        );
-        
-        const successfulResults = batchResults
-          .filter((result): result is PromiseFulfilledResult<{trainId: string, delay: number}> => 
-            result.status === 'fulfilled')
-          .map(result => result.value);
-        
-        console.log(`✅ Batch ${batchIndex + 1} completed: ${successfulResults.length}/${batch.length} successful`);
-        return successfulResults;
-      });
-
-      // Wait for all batches to complete
-      const allBatchResults = await Promise.all(batchPromises);
-      const allDelayResults = allBatchResults.flat();
-      
-      // Create delay map for fast lookup
-      const delayMap = new Map<string, number>();
-      allDelayResults.forEach(result => {
-        delayMap.set(result.trainId, result.delay);
-      });
-      
-      // Update trains with delay information
       const trainsWithDelays = trains.map(train => ({
         ...train,
-        Keses: delayMap.get(train.VonatSzam) ?? train.Keses
+        Keses: delayMap.get(train.VonatSzam) ?? train.Keses,
       }));
-      
+
+      console.log(`\u23f1\ufe0f Delays resolved inline for ${delayMap.size}/${trains.length} trains (0 extra requests)`);
+
       // Log final statistics
       const trainsWithDelay = trainsWithDelays.filter(t => t.Keses > 0);
       console.log(`✅ Fetched ${trainsWithDelays.length} trains with delay information:`);
-      console.log(`  📊 Delays fetched for: ${allDelayResults.length}/${trainsWithGtfsId.length} trains`);
       console.log(`  🟢 On-time (0-4 min): ${trainsWithDelays.filter(t => t.Keses <= 4).length}`);
       console.log(`  🟡 Minor delay (5-19 min): ${trainsWithDelay.filter(t => t.Keses >= 5 && t.Keses <= 19).length}`);
       console.log(`  🟠 Moderate delay (20-59 min): ${trainsWithDelay.filter(t => t.Keses >= 20 && t.Keses <= 59).length}`);
