@@ -39,7 +39,7 @@ export const metadata: Metadata = {
       {
         url: "/og.png",
         width: 1200,
-        height: 630,
+        height: 697,
         alt: "VasútTérkép - Élő vasútkövetés Magyarországon",
         type: "image/png",
       },
@@ -63,7 +63,7 @@ export const metadata: Metadata = {
     
     // Additional OpenGraph
     "og:image:width": "1200",
-    "og:image:height": "630",
+    "og:image:height": "697",
     "og:image:type": "image/png",
     "og:locale:alternate": "en_US",
     
@@ -91,9 +91,9 @@ export default function RootLayout({
       <head>
         <link
           rel="preload"
-          href="/fonts/mnr2007.ttf"
+          href="/fonts/mnr2007.woff2"
           as="font"
-          type="font/ttf"
+          type="font/woff2"
           crossOrigin="anonymous"
         />
         
