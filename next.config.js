@@ -28,6 +28,43 @@ const nextConfig = {
     removeConsole: process.env.NODE_ENV === 'production',
   },
   
+  // Security response headers (applied to every route).
+  // NOTE: no Content-Security-Policy is set here on purpose - this app loads
+  // Mapbox GL (api.mapbox.com, events.mapbox.com, blob: workers, data: images,
+  // eval-based shaders) and Google Tag Manager, and a wrong CSP would silently
+  // break the live map. Add one only after testing it against the real map.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            // geolocation stays enabled for self: the live map uses it to
+            // centre on the visitor.
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=(self)',
+          },
+        ],
+      },
+    ]
+  },
+  
   // Webpack optimizations
   webpack: (config, { dev, isServer }) => {
     // Production optimizations.
