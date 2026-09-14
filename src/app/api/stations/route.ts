@@ -1,131 +1,173 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { redisClient } from '@/lib/redis';
-import { mavApi } from '@/lib/api/mav';
+import { mavApi, MavStation, OtpRateLimitedError } from '@/lib/api/mav';
 import { transformMavStation } from '@/lib/api/transformers';
 import { Station } from '@/types';
 
 const CACHE_KEY = 'cache:stations:all';
-const CACHE_TTL_SECONDS = 12 * 60 * 60; // 12 hours
+
+// Station geometry changes a handful of times a year, and mavplusz.hu rate limits
+// per host - so cache hard. A cache hit costs zero upstream requests; a cold cache
+// costs exactly one bulk GraphQL query for the whole network.
+const CACHE_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
+
+// The hardcoded fallback is cached far more briefly so we pick up the real list
+// soon after the upstream recovers - but not so briefly that we retry on every
+// request while we are being rate limited.
+const FALLBACK_CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
+
+// Second line of defence: if Redis is unavailable, this keeps a Redis outage from
+// turning into one upstream request per page view.
+const MEMORY_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// A search for "a" matches most of the network; there is no point shipping - or
+// rendering - thousands of rows into a dropdown.
+const MAX_SEARCH_RESULTS = 100;
+
+let memoryCache: { stations: Station[]; expiresAt: number } | null = null;
+
+// Coalesces concurrent cache misses so a cold start cannot fan out into one
+// upstream request per visitor.
+let inFlightFetch: Promise<Station[]> | null = null;
+
+// Known-good positions for the busiest stations, taken from the same OTP feed.
+// Used only when the upstream is unreachable, so the map is not empty.
+const FALLBACK_STATIONS: MavStation[] = [
+  { UicKod: '1:005510017', Nev: 'Budapest-Keleti', GPS: { Lat: 47.500278, Lng: 19.084167 } },
+  { UicKod: '1:005510033', Nev: 'Budapest-Nyugati', GPS: { Lat: 47.510833, Lng: 19.0575 } },
+  { UicKod: '1:005501016', Nev: 'Budapest-Déli', GPS: { Lat: 47.498889, Lng: 19.025 } },
+  { UicKod: '1:005501024', Nev: 'Budapest-Kelenföld', GPS: { Lat: 47.464444, Lng: 19.02 } },
+  { UicKod: '1:005513912', Nev: 'Debrecen', GPS: { Lat: 47.520278, Lng: 21.628611 } },
+  { UicKod: '1:005517228', Nev: 'Szeged', GPS: { Lat: 46.239722, Lng: 20.143056 } },
+  { UicKod: '1:005507294', Nev: 'Pécs', GPS: { Lat: 46.065833, Lng: 18.223611 } },
+  { UicKod: '1:005501289', Nev: 'Győr', GPS: { Lat: 47.681944, Lng: 17.634722 } },
+  { UicKod: '1:005514019', Nev: 'Nyíregyháza', GPS: { Lat: 47.946667, Lng: 21.705556 } },
+  { UicKod: '1:005511387', Nev: 'Miskolc-Tiszai', GPS: { Lat: 48.098719, Lng: 20.810916 } },
+  { UicKod: '1:004302246', Nev: 'Szombathely', GPS: { Lat: 47.237778, Lng: 16.6325 } },
+  { UicKod: '1:005504747', Nev: 'Keszthely', GPS: { Lat: 46.758333, Lng: 17.248056 } },
+  { UicKod: '1:005503947', Nev: 'Veszprém', GPS: { Lat: 47.118889, Lng: 17.91 } },
+  { UicKod: '1:005504689', Nev: 'Ukk', GPS: { Lat: 47.041944, Lng: 17.195833 } },
+  { UicKod: '1:005504598', Nev: 'Tapolca', GPS: { Lat: 46.877778, Lng: 17.428611 } },
+  { UicKod: '1:005504416', Nev: 'Balatonfüred', GPS: { Lat: 46.955833, Lng: 17.883056 } },
+  { UicKod: '1:005503350', Nev: 'Siófok', GPS: { Lat: 46.907778, Lng: 18.053889 } },
+  { UicKod: '1:004302725', Nev: 'Sopron', GPS: { Lat: 47.677778, Lng: 16.587222 } },
+  { UicKod: '1:005501131', Nev: 'Tatabánya', GPS: { Lat: 47.585556, Lng: 18.393056 } },
+  { UicKod: '1:005501511', Nev: 'Esztergom', GPS: { Lat: 47.7775, Lng: 18.743611 } },
+  { UicKod: '1:005513748', Nev: 'Szolnok', GPS: { Lat: 47.179167, Lng: 20.175833 } },
+  { UicKod: '1:005518036', Nev: 'Békéscsaba', GPS: { Lat: 46.669722, Lng: 21.081667 } },
+  { UicKod: '1:005512401', Nev: 'Eger', GPS: { Lat: 47.891667, Lng: 20.381667 } },
+  { UicKod: '1:005506288', Nev: 'Kaposvár', GPS: { Lat: 46.352778, Lng: 17.795 } },
+  { UicKod: '1:005517111', Nev: 'Kecskemét', GPS: { Lat: 46.913889, Lng: 19.700833 } },
+  { UicKod: '1:005503624', Nev: 'Nagykanizsa', GPS: { Lat: 46.440833, Lng: 16.986667 } },
+  { UicKod: '1:005503269', Nev: 'Székesfehérvár', GPS: { Lat: 47.183611, Lng: 18.424722 } },
+  { UicKod: '1:005504895', Nev: 'Zalaegerszeg', GPS: { Lat: 46.833056, Lng: 16.848333 } },
+  { UicKod: '1:005502121', Nev: 'Pápa', GPS: { Lat: 47.340556, Lng: 17.458889 } },
+  { UicKod: '1:005510447', Nev: 'Vác', GPS: { Lat: 47.782778, Lng: 19.133056 } },
+  { UicKod: '1:005513722', Nev: 'Cegléd', GPS: { Lat: 47.182778, Lng: 19.806111 } },
+  { UicKod: '1:005511205', Nev: 'Hatvan', GPS: { Lat: 47.663611, Lng: 19.671389 } },
+  { UicKod: '1:005513482', Nev: 'Sátoraljaújhely', GPS: { Lat: 48.385833, Lng: 21.657778 } },
+  { UicKod: '1:005503566', Nev: 'Balatonszentgyörgy', GPS: { Lat: 46.692778, Lng: 17.288889 } },
+  { UicKod: '1:005506189', Nev: 'Dombóvár', GPS: { Lat: 46.37, Lng: 18.149722 } },
+];
+
+async function readCache(): Promise<Station[] | null> {
+  if (memoryCache && memoryCache.expiresAt > Date.now()) {
+    return memoryCache.stations;
+  }
+
+  try {
+    const cached = await redisClient.get(CACHE_KEY);
+    if (!cached) return null;
+    const stations = JSON.parse(cached) as Station[];
+    if (!Array.isArray(stations) || stations.length === 0) return null;
+    memoryCache = { stations, expiresAt: Date.now() + MEMORY_CACHE_TTL_MS };
+    return stations;
+  } catch (error) {
+    console.error('Failed to read station cache from Redis:', error);
+    return null;
+  }
+}
+
+function writeCache(stations: Station[], ttlSeconds: number): void {
+  memoryCache = { stations, expiresAt: Date.now() + MEMORY_CACHE_TTL_MS };
+  redisClient
+    .set(CACHE_KEY, JSON.stringify(stations), { EX: ttlSeconds })
+    .catch((err: Error) => console.error('Failed to cache stations in Redis:', err));
+}
+
+/** One upstream bulk query, shared by every concurrent caller. */
+async function fetchStations(): Promise<Station[]> {
+  if (inFlightFetch) return inFlightFetch;
+
+  inFlightFetch = (async () => {
+    try {
+      const mavStations = await mavApi.getStations();
+      const stations = mavStations.map(transformMavStation).filter(station => station.coordinates);
+
+      if (stations.length === 0) {
+        throw new Error('OTP returned stations but none had usable coordinates');
+      }
+
+      writeCache(stations, CACHE_TTL_SECONDS);
+      console.log(`✅ Fetched and cached ${stations.length} stations from the MAV OTP API`);
+      return stations;
+    } finally {
+      inFlightFetch = null;
+    }
+  })();
+
+  return inFlightFetch;
+}
 
 export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams;
-    const search = searchParams.get('search');
-    
-    // Try to get stations from Redis cache first
-    const cachedData = await redisClient.get(CACHE_KEY);
-    
-    let stations: Station[];
-    
-    if (cachedData) {
-      // Cache Hit: Use cached data
-      console.log('Using cached station data from Redis');
-      stations = JSON.parse(cachedData);
-    } else {
-      // Cache Miss: Fetch from MÁV API and fill cache
-      console.log('Cache miss - fetching fresh station data from MÁV...');
-      
-      try {
-        const mavStations = await mavApi.getStations();
-        
-        // Transform stations to our format
-        const transformedStations = mavStations
-          .filter(station => station.GPS) // Only include stations with GPS coordinates
-          .map(transformMavStation);
-        
-        // Asynchronously cache the data in Redis (don't await to keep response fast)
-        redisClient.set(CACHE_KEY, JSON.stringify(transformedStations), {
-          EX: CACHE_TTL_SECONDS,
-        }).catch((err: Error) => console.error('Failed to cache stations:', err));
-        
-        stations = transformedStations;
-        console.log(`Fetched and cached ${stations.length} stations from MÁV API`);
-        
-      } catch (stationError) {
-        console.warn('MÁV station API failed, using fallback station data:', stationError);
-        
-        // Comprehensive fallback set of Hungarian stations including the missing ones
-        const fallbackStations = [
-          // Major Budapest stations
-          { UicKod: '5500007', Nev: 'Budapest-Keleti', GPS: { Lat: 47.5000, Lng: 19.0833 } },
-          { UicKod: '5500001', Nev: 'Budapest-Nyugati', GPS: { Lat: 47.5167, Lng: 19.0667 } },
-          { UicKod: '5500004', Nev: 'Budapest-Déli', GPS: { Lat: 47.4667, Lng: 19.0167 } },
-          { UicKod: '5500002', Nev: 'Budapest-Ferencváros', GPS: { Lat: 47.4833, Lng: 19.0833 } },
-          
-          // Major regional centers
-          { UicKod: '5513604', Nev: 'Debrecen', GPS: { Lat: 47.5316, Lng: 21.6273 } },
-          { UicKod: '5518701', Nev: 'Szeged', GPS: { Lat: 46.2530, Lng: 20.1414 } },
-          { UicKod: '5517401', Nev: 'Pécs', GPS: { Lat: 46.0727, Lng: 18.2323 } },
-          { UicKod: '5512101', Nev: 'Győr', GPS: { Lat: 47.6833, Lng: 17.6333 } },
-          { UicKod: '5514701', Nev: 'Nyíregyháza', GPS: { Lat: 47.9556, Lng: 21.7267 } },
-          { UicKod: '5515801', Nev: 'Miskolc', GPS: { Lat: 48.1031, Lng: 20.7784 } },
-          { UicKod: '5511501', Nev: 'Szombathely', GPS: { Lat: 47.2333, Lng: 16.6167 } },
-          { UicKod: '5517001', Nev: 'Keszthely', GPS: { Lat: 46.7667, Lng: 17.2500 } },
-          
-          // Previously missing stations
-          { UicKod: '5516001', Nev: 'Veszprém', GPS: { Lat: 47.0934, Lng: 17.9104 } },
-          { UicKod: '5516101', Nev: 'Ukk', GPS: { Lat: 47.0167, Lng: 17.8833 } },
-          { UicKod: '5516501', Nev: 'Tapolca', GPS: { Lat: 46.8833, Lng: 17.4333 } },
-          
-          // Additional important stations around Lake Balaton and major routes
-          { UicKod: '5516201', Nev: 'Balatonfüred', GPS: { Lat: 46.9567, Lng: 17.8889 } },
-          { UicKod: '5516301', Nev: 'Siófok', GPS: { Lat: 46.9044, Lng: 18.0569 } },
-          { UicKod: '5511001', Nev: 'Sopron', GPS: { Lat: 47.6833, Lng: 16.5833 } },
-          { UicKod: '5512801', Nev: 'Tatabánya', GPS: { Lat: 47.5694, Lng: 18.3969 } },
-          { UicKod: '5513001', Nev: 'Esztergom', GPS: { Lat: 47.7928, Lng: 18.7439 } },
-          { UicKod: '5514001', Nev: 'Szolnok', GPS: { Lat: 47.1739, Lng: 20.1989 } },
-          { UicKod: '5518001', Nev: 'Békéscsaba', GPS: { Lat: 46.6758, Lng: 21.0967 } },
-          { UicKod: '5515001', Nev: 'Eger', GPS: { Lat: 47.9022, Lng: 20.3739 } },
-          { UicKod: '5519001', Nev: 'Kaposvár', GPS: { Lat: 46.3667, Lng: 17.8 } },
-          { UicKod: '5510001', Nev: 'Kecskemét', GPS: { Lat: 46.8969, Lng: 19.6914 } },
-          { UicKod: '5517501', Nev: 'Nagykanizsa', GPS: { Lat: 46.4567, Lng: 16.9914 } },
-          { UicKod: '5512501', Nev: 'Székesfehérvár', GPS: { Lat: 47.1889, Lng: 18.4106 } },
-          { UicKod: '5516801', Nev: 'Zalaegerszeg', GPS: { Lat: 46.8408, Lng: 16.8439 } },
-          
-          // Additional regional stations
-          { UicKod: '5511801', Nev: 'Pápa', GPS: { Lat: 47.3333, Lng: 17.4667 } },
-          { UicKod: '5512401', Nev: 'Vác', GPS: { Lat: 47.7756, Lng: 19.1364 } },
-          { UicKod: '5510501', Nev: 'Cegléd', GPS: { Lat: 47.1733, Lng: 19.7953 } },
-          { UicKod: '5514201', Nev: 'Hatvan', GPS: { Lat: 47.6667, Lng: 19.6833 } },
-          { UicKod: '5515501', Nev: 'Sátoraljaújhely', GPS: { Lat: 48.3939, Lng: 21.6578 } },
-          { UicKod: '5516901', Nev: 'Balatonszentgyörgy', GPS: { Lat: 46.7667, Lng: 17.3833 } },
-          { UicKod: '5517201', Nev: 'Dombóvár', GPS: { Lat: 46.3739, Lng: 18.1328 } }
-        ];
-        
-        // Transform fallback stations
-        stations = fallbackStations.map(transformMavStation);
-        
-        // Cache fallback data for a shorter period (1 hour)
-        redisClient.set(CACHE_KEY, JSON.stringify(stations), {
-          EX: 3600, // 1 hour for fallback data
-        }).catch((err: Error) => console.error('Failed to cache fallback stations:', err));
-        
-        console.log(`Using comprehensive fallback data with ${stations.length} Hungarian stations`);
+  const searchParams = request.nextUrl.searchParams;
+  const search = searchParams.get('search');
+
+  let stations: Station[] | null = await readCache();
+  const cacheHit = stations !== null;
+  let source: 'cache' | 'upstream' | 'fallback' = 'cache';
+
+  if (!stations) {
+    try {
+      stations = await fetchStations();
+      source = 'upstream';
+    } catch (error) {
+      // LOUD. A silent fallback to 35 hardcoded stations is how this went
+      // unnoticed for months.
+      if (error instanceof OtpRateLimitedError) {
+        console.error(
+          '🚫 Station fetch skipped: MAV OTP API is rate limiting this host. ' +
+          'Serving the hardcoded fallback station list.'
+        );
+      } else {
+        console.error(
+          '🚨 STATION FETCH FAILED - serving the hardcoded fallback station list. ' +
+          'Station coverage and coordinates are incomplete until this recovers. Cause:',
+          error
+        );
       }
+
+      stations = FALLBACK_STATIONS.map(transformMavStation);
+      source = 'fallback';
+      writeCache(stations, FALLBACK_CACHE_TTL_SECONDS);
+      console.error(`⚠️ Using fallback station data (${stations.length} stations instead of the full network)`);
     }
-    
-    // Apply search filter if provided
-    if (search) {
-      const searchLower = search.toLowerCase();
-      stations = stations.filter((station: Station) =>
-        station.name.toLowerCase().includes(searchLower)
-      );
-    }
-    
-    return NextResponse.json(stations, {
-      headers: {
-        'X-Cache-Status': cachedData ? 'HIT' : 'MISS',
-        'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
-      }
-    });
-    
-  } catch (error) {
-    console.error('Error fetching stations:', error);
-    
-    // Return error response
-    return NextResponse.json(
-      { error: 'Failed to fetch station data', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 503 }
-    );
   }
+
+  let result = stations;
+
+  if (search) {
+    const searchLower = search.toLowerCase();
+    result = result
+      .filter((station: Station) => station.name.toLowerCase().includes(searchLower))
+      .slice(0, MAX_SEARCH_RESULTS);
+  }
+
+  return NextResponse.json(result, {
+    headers: {
+      'X-Cache-Status': cacheHit ? 'HIT' : 'MISS',
+      'X-Data-Source': source,
+      'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+    }
+  });
 }

@@ -6,7 +6,12 @@ export interface Coordinates {
 export interface Station {
   id: string;
   name: string;
-  coordinates: Coordinates;
+  /**
+   * Absent when the upstream feed does not give us a position. Do NOT substitute
+   * { latitude: 0, longitude: 0 } - that is open water off West Africa and it
+   * renders stations and trains in the Gulf of Guinea.
+   */
+  coordinates?: Coordinates;
   platforms?: string[];
   services?: string[];
 }
@@ -21,7 +26,8 @@ export interface Train {
   id: string;
   number: string;
   type: TrainType;
-  position: Coordinates;
+  /** Absent when we have no GPS fix for the train. Never fake 0,0. */
+  position?: Coordinates;
   speed: number;
   heading: number;
   delay: number;  // in minutes, from real-time API

@@ -82,10 +82,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const stationData = {
       id: station.UicKod,
       name: station.Nev,
-      coordinates: {
-        latitude: station.GPS?.Lat || 0,
-        longitude: station.GPS?.Lng || 0
-      }
+      coordinates: station.GPS
+        ? { latitude: station.GPS.Lat, longitude: station.GPS.Lng }
+        : undefined
     };
     
     let timetableData;
