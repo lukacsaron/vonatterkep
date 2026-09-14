@@ -211,7 +211,15 @@ function parseTimeString(timeStr: string): Date {
   // Handle various MÁV time formats
   // e.g., "14:30", "2024.12.23 14:30", timestamp
   const now = new Date();
-  
+
+  // A full ISO instant carries its own date - parse it as-is. Checking this
+  // first matters because an ISO string also contains ':' and would otherwise
+  // fall into the HH:MM branch below and lose its date.
+  if (/^\d{4}-\d{2}-\d{2}T/.test(timeStr)) {
+    const parsed = new Date(timeStr);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+
   if (timeStr.includes(':')) {
     const [hours, minutes] = timeStr.split(':').map(Number);
     const date = new Date(now);

@@ -265,65 +265,120 @@ class MavApiClient {
   }
 
   // Get train departures for a station
-  async getDepartures(stationId: string, date: Date = new Date()): Promise<MavDeparture[]> {
-    try {
-      const dateStr = date.toISOString().split('T')[0].replace(/-/g, '.');
-      
-      const response = await fetch(`${MAV_MOBILE_API_BASE}/GetAllomasInfo`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': MAV_USER_AGENT,
-        },
-        body: JSON.stringify({
-          UAID: MAV_UAID,
-          Nyelv: 'HU',
-          AllomasKod: stationId,
-          Datum: dateStr
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`MÁV API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return (data as any)?.Indulasok || [];
-    } catch (error) {
-      console.error('Error fetching departures from MÁV:', error);
-      throw error;
+  /**
+   * Station timetables used to come from vim.mav-start.hu, which is dead (500/404),
+   * so every station timetable request returned HTTP 500. OTP serves the same
+   * information - including realtime delays - from the stop we already know about,
+   * in a single request per station.
+   */
+  private async getStopTimes(stationId: string, limit?: number, omitNonPickups = false): Promise<any[]> {
+    // How deep OTP looks per pattern. This is the upstream fetch depth, NOT the
+    // number of rows returned to the caller - a terminus has many patterns.
+    const DEPARTURES_PER_PATTERN = 20;
+    const gtfsId = await this.resolveStopId(stationId);
+    if (!gtfsId) {
+      console.error(`No OTP stop found for station id "${stationId}"`);
+      return [];
     }
+
+    const query = `{
+      stop(id: "${gtfsId}") {
+        gtfsId
+        name
+        stoptimesWithoutPatterns(numberOfDepartures: ${DEPARTURES_PER_PATTERN}, omitCanceled: false, omitNonPickups: ${omitNonPickups}) {
+          serviceDay
+          scheduledArrival
+          scheduledDeparture
+          arrivalDelay
+          departureDelay
+          realtime
+          headsign
+          stop { platformCode }
+          trip {
+            tripShortName
+            tripHeadsign
+            route { shortName mode }
+            stops { name }
+          }
+        }
+      }
+    }`;
+
+    const data = await otpGraphQLRequest<{ stop: any }>(query, `getStopTimes(${gtfsId})`);
+    const stoptimes: any[] = data?.stop?.stoptimesWithoutPatterns || [];
+    // OTP groups rows per pattern, so they arrive out of order. Sort chronologically.
+    // No truncation by default: the old MobileService returned a whole day and the
+    // station page renders every row, so capping here would silently hide departures.
+    const sorted = stoptimes.sort((a, b) =>
+      (a.serviceDay + (a.scheduledDeparture ?? a.scheduledArrival ?? 0)) -
+      (b.serviceDay + (b.scheduledDeparture ?? b.scheduledArrival ?? 0))
+    );
+    return typeof limit === 'number' ? sorted.slice(0, limit) : sorted;
   }
 
-  // Get train arrivals for a station
-  async getArrivals(stationId: string, date: Date = new Date()): Promise<MavArrival[]> {
-    try {
-      const dateStr = date.toISOString().split('T')[0].replace(/-/g, '.');
-      
-      const response = await fetch(`${MAV_MOBILE_API_BASE}/GetAllomasInfo`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': MAV_USER_AGENT,
-        },
-        body: JSON.stringify({
-          UAID: MAV_UAID,
-          Nyelv: 'HU',
-          AllomasKod: stationId,
-          Datum: dateStr
-        })
+  /** Accept either an OTP gtfsId ("1:005510017") or a bare station code. */
+  private async resolveStopId(stationId: string): Promise<string | null> {
+    if (stationId.includes(':')) return stationId;
+    const stations = await this.getStations();
+    const bare = stationId.replace(/^0+/, '');
+    const hit = stations.find(st => {
+      const id = String(st.UicKod || '');
+      const tail = id.split(':').pop() || '';
+      return id === stationId || tail === stationId || tail.replace(/^0+/, '') === bare;
+    });
+    return hit ? String(hit.UicKod) : null;
+  }
+
+  /**
+   * OTP gives seconds from midnight of serviceDay (epoch seconds). Departures
+   * after midnight exceed 86400, so returning a bare HH:MM would lose the day
+   * and sort a 02:00 departure before the 22:00 one that precedes it.
+   */
+  private static toClock(serviceDay: number, secondsFromMidnight: number | null | undefined): string {
+    if (typeof secondsFromMidnight !== 'number') return '';
+    return new Date((serviceDay + secondsFromMidnight) * 1000).toISOString();
+  }
+
+  private static toMinutes(seconds: number | null | undefined): number {
+    return typeof seconds === 'number' ? Math.max(0, Math.round(seconds / 60)) : 0;
+  }
+
+  async getDepartures(stationId: string, _date: Date = new Date(), limit?: number): Promise<MavDeparture[]> {
+    // omitNonPickups drops stoptimes you cannot board - i.e. trains that terminate
+    // here. Without it a terminus lists arriving trains as departures, with the
+    // station itself shown as their destination.
+    const stoptimes = await this.getStopTimes(stationId, limit, true);
+    return stoptimes
+      .filter(st => typeof st.scheduledDeparture === 'number')
+      .map(st => {
+        const trip = st.trip || {};
+        return {
+          VonatSzam: trip.tripShortName || trip.route?.shortName || '',
+          Indulas: MavApiClient.toClock(st.serviceDay, st.scheduledDeparture),
+          Celallomas: st.headsign || trip.tripHeadsign || '',
+          Vagany: st.stop?.platformCode || undefined,
+          Keses: MavApiClient.toMinutes(st.departureDelay),
+          Tipus: trip.route?.mode || 'RAIL',
+        } as MavDeparture;
       });
+  }
 
-      if (!response.ok) {
-        throw new Error(`MÁV API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return (data as any)?.Erkezesek || [];
-    } catch (error) {
-      console.error('Error fetching arrivals from MÁV:', error);
-      throw error;
-    }
+  async getArrivals(stationId: string, _date: Date = new Date(), limit?: number): Promise<MavArrival[]> {
+    const stoptimes = await this.getStopTimes(stationId, limit);
+    return stoptimes
+      .filter(st => typeof st.scheduledArrival === 'number')
+      .map(st => {
+        const trip = st.trip || {};
+        const stops = trip.stops || [];
+        return {
+          VonatSzam: trip.tripShortName || trip.route?.shortName || '',
+          Erkezes: MavApiClient.toClock(st.serviceDay, st.scheduledArrival),
+          Kiindulas: stops.length ? (stops[0]?.name || '') : '',
+          Vagany: st.stop?.platformCode || undefined,
+          Keses: MavApiClient.toMinutes(st.arrivalDelay),
+          Tipus: trip.route?.mode || 'RAIL',
+        } as MavArrival;
+      });
   }
 
   // Generic method to get both departures and arrivals
