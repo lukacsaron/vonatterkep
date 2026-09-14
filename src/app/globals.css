@@ -5,7 +5,8 @@
 /* MNR2007 Font - Hungarian Railway iconographic font */
 @font-face {
   font-family: 'MNR2007';
-  src: url('/fonts/mnr2007.ttf') format('truetype');
+  src: url('/fonts/mnr2007.woff2') format('woff2'),
+       url('/fonts/mnr2007.ttf') format('truetype');
   font-display: swap;
   font-weight: normal;
   font-style: normal;
