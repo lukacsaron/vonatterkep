@@ -10,18 +10,24 @@ import { Train, TrainDetails } from '../src/types';
 // Dynamic import of redisClient after environment is loaded
 const { redisClient } = require('../src/lib/redis');
 
-const FETCH_INTERVAL_MS = parseInt(process.env.WORKER_FETCH_INTERVAL_MS || '25000', 10);
+const FETCH_INTERVAL_MS = parseInt(process.env.WORKER_FETCH_INTERVAL_MS || '60000', 10);
 const CACHE_KEY = 'cache:trains:live';
 const HASH_KEY = 'trains:live';
 const ROUTE_CACHE_KEY = 'cache:routes';
 const CACHE_TTL_SECONDS = 60;
-const ROUTE_CACHE_TTL_SECONDS = 300; // Cache routes for 5 minutes
+// A trip's route geometry does not change during the day, so caching it for minutes
+// was burning the upstream request budget for nothing.
+const ROUTE_CACHE_TTL_SECONDS = parseInt(process.env.WORKER_ROUTE_CACHE_TTL || '86400', 10);
 const REDIS_CHANNEL = 'trains:updates';
-const MAX_ROUTE_FETCHES_PER_CYCLE = 50; // Increase limit to get more origin data
+// MÁV rate-limits per host (it answers 403 with the body "host limit achived").
+// At 50 route fetches every 25s this worker issued ~7,300 requests/hour and sat
+// permanently inside the penalty window. Keep the per-cycle budget small; the
+// route cache fills in over successive cycles instead.
+const MAX_ROUTE_FETCHES_PER_CYCLE = parseInt(process.env.WORKER_MAX_ROUTE_FETCHES || '8', 10);
 
 // In-memory cache for route details to avoid excessive Redis operations
 const routeCache = new Map<string, { data: TrainDetails; timestamp: number }>();
-const ROUTE_CACHE_MEMORY_TTL = 5 * 60 * 1000; // 5 minutes in memory cache
+const ROUTE_CACHE_MEMORY_TTL = parseInt(process.env.WORKER_ROUTE_MEMORY_TTL_MS || '21600000', 10); // 6h
 
 // Helper function to get cached route data
 async function getCachedRouteDetails(gtfsId: string): Promise<TrainDetails | null> {
@@ -100,7 +106,7 @@ async function fetchRouteDetailsWithCache(gtfsId: string): Promise<TrainDetails 
   return null;
 }
 
-async function runFetchCycle() {
+async function runFetchCycle(): Promise<boolean> {
   console.log('Starting MÁV data fetch cycle...');
   try {
     // 1. Fetch raw data from MÁV
@@ -212,7 +218,7 @@ async function runFetchCycle() {
       
     if (trains.length === 0) {
         console.warn('MÁV API returned 0 trains. Cache will not be updated.');
-        return;
+        return false;
     }
 
     // 3. Write to Redis cache using HASH for better performance
@@ -231,7 +237,7 @@ async function runFetchCycle() {
     }
     if (trainsWithValidIds.length === 0) {
       console.warn('No trains with valid gtfsId found. Keeping previous cache.');
-      return;
+      return false;
     }
 
     const newTrainIds = new Set(trainsWithValidIds.map(t => t.gtfsId));
@@ -264,19 +270,63 @@ async function runFetchCycle() {
     await redisClient.publish(REDIS_CHANNEL, 'new-data');
     
     console.log(`Successfully cached ${trains.length} trains and published update.`);
+    return true;
 
   } catch (error) {
     console.error('An error occurred during the fetch cycle:', error);
     // Do not re-throw; we want the worker to continue running for the next cycle.
+    return false;
   }
 }
 
 // --- Main Execution ---
-console.log(`Background worker started. Fetching data every ${FETCH_INTERVAL_MS / 1000} seconds.`);
+// Back off when upstream is unhappy. A fixed interval meant that once MÁV started
+// rate-limiting us we kept re-tripping the limit every cycle and never recovered.
+const MAX_BACKOFF_MS = parseInt(process.env.WORKER_MAX_BACKOFF_MS || '1800000', 10); // 30 min
+let consecutiveFailures = 0;
+
+function nextDelayMs(): number {
+  if (consecutiveFailures === 0) return FETCH_INTERVAL_MS;
+  const backoff = FETCH_INTERVAL_MS * Math.pow(2, consecutiveFailures);
+  // Jitter so a restart loop cannot synchronise into a thundering herd.
+  const jitter = Math.floor(Math.random() * 5000);
+  return Math.min(backoff, MAX_BACKOFF_MS) + jitter;
+}
+
+async function scheduleNextCycle() {
+  let ok = false;
+  try {
+    ok = await runFetchCycle();
+  } catch (err) {
+    console.error('Unhandled error escaping fetch cycle:', err);
+  }
+
+  if (ok) {
+    if (consecutiveFailures > 0) {
+      console.log(`\u2705 Upstream recovered after ${consecutiveFailures} failed cycle(s).`);
+    }
+    consecutiveFailures = 0;
+  } else {
+    consecutiveFailures += 1;
+  }
+
+  const delay = nextDelayMs();
+  if (consecutiveFailures > 0) {
+    console.warn(
+      `\u23f8\ufe0f ${consecutiveFailures} consecutive failed cycle(s); next attempt in ${Math.round(delay / 1000)}s ` +
+      `(backing off - MÁV rate-limits per host).`
+    );
+  }
+  setTimeout(scheduleNextCycle, delay);
+}
+
+console.log(
+  `Background worker started. Base interval ${FETCH_INTERVAL_MS / 1000}s, ` +
+  `max ${MAX_ROUTE_FETCHES_PER_CYCLE} route fetches/cycle, route cache ${ROUTE_CACHE_TTL_SECONDS}s.`
+);
 
 // Wait a bit for Redis connection to establish, then start
 setTimeout(() => {
   console.log('Starting initial fetch cycle...');
-  runFetchCycle(); 
-  setInterval(runFetchCycle, FETCH_INTERVAL_MS);
+  scheduleNextCycle();
 }, 2000);
