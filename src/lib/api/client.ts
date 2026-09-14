@@ -11,7 +11,16 @@ export const queryClient = new QueryClient({
   },
 });
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+// NEXT_PUBLIC_API_URL may be set to an origin with or without the /api suffix
+// (Coolify has it as "https://vasutterkep.hu"). Normalise so requests always
+// land on the API routes rather than on a page route.
+function resolveApiBase(): string {
+  const raw = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/+$/, '');
+  if (!raw) return '/api';
+  return raw.endsWith('/api') ? raw : `${raw}/api`;
+}
+
+const API_BASE_URL = resolveApiBase();
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {

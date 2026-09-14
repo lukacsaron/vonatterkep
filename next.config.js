@@ -30,33 +30,30 @@ const nextConfig = {
   
   // Webpack optimizations
   webpack: (config, { dev, isServer }) => {
-    // Production optimizations
-    if (!dev && !isServer) {
-      config.optimization.splitChunks = {
-        chunks: 'all',
-        cacheGroups: {
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: 'vendors',
-            chunks: 'all',
-            enforce: true,
-          },
-          mapbox: {
-            test: /[\\/]node_modules[\\/]mapbox-gl[\\/]/,
-            name: 'mapbox',
-            chunks: 'all',
-            priority: 10,
-          },
-          radix: {
-            test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
-            name: 'radix-ui',
-            chunks: 'all',
-            priority: 5,
-          },
+    // Production optimizations.
+    // NOTE: merge into Next's existing splitChunks config - replacing it wholesale
+    // drops the rules that keep extracted CSS out of the JS chunk groups, which
+    // makes Next emit <script src="....css"> and throws a SyntaxError in the browser.
+    if (!dev && !isServer && typeof config.optimization?.splitChunks === 'object') {
+      config.optimization.splitChunks.cacheGroups = {
+        ...config.optimization.splitChunks.cacheGroups,
+        mapbox: {
+          test: /[\\/]node_modules[\\/]mapbox-gl[\\/]/,
+          name: 'mapbox',
+          chunks: 'all',
+          priority: 10,
+          reuseExistingChunk: true,
+        },
+        radix: {
+          test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
+          name: 'radix-ui',
+          chunks: 'all',
+          priority: 5,
+          reuseExistingChunk: true,
         },
       };
     }
-    
+
     return config;
   },
   

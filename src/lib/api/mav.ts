@@ -4,7 +4,7 @@ import { parseUIC } from '../uicParser';
 
 // Constants from reference implementations
 const MAV_MOBILE_API_BASE = 'http://vim.mav-start.hu/VIM/PR/150225/MobileService.svc/rest';
-const MAV_EMMA_API_BASE = 'https://emma.mav.hu/otp2-backend/otp/routers/default/index/graphql'; // Correct endpoint from holavonat-app
+const MAV_EMMA_API_BASE = 'https://mavplusz.hu/otp2-backend/otp/routers/default/index/graphql'; // Correct endpoint from holavonat-app
 
 // Authentication tokens from reference implementations
 const MAV_UAID = '2Juija1mabqr24Blkx1qkXxJ105j'; // From mav library
@@ -400,7 +400,7 @@ class MavApiClient {
   // Get train route geometry (polyline) for map visualization
   async getTrainGeometry(gtfsId: string): Promise<string | null> {
     try {
-      const url = `https://emma.mav.hu/otp2-backend/otp/routers/default/index/trips/${gtfsId}/geometry`;
+      const url = `https://mavplusz.hu/otp2-backend/otp/routers/default/index/trips/${gtfsId}/geometry`;
       console.log(`🗺️ Fetching route geometry for ${gtfsId}`);
       
       const response = await fetch(url, {
