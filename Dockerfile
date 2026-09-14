@@ -11,7 +11,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 
 # Install dependencies (all dependencies needed for build)
-RUN npm ci
+RUN npm ci --include=dev
 
 # Copy source code
 COPY . .
