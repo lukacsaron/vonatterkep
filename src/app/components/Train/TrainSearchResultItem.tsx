@@ -37,19 +37,18 @@ export function TrainSearchResultItem({ train, className }: TrainSearchResultIte
     id: train.gtfsId,
     number: train.trainNumber,
     type: train.trainType,
-    position: { latitude: 0, longitude: 0 }, // Not available in search results
+    // Position/coordinates are not available in search results - left absent
+    // rather than faked as 0,0.
     speed: 0, // Not available in search results
     heading: 0, // Not available in search results
     delay: train.liveDelayMinutes || 0,
     origin: {
       id: '',
-      name: train.origin.name,
-      coordinates: { latitude: 0, longitude: 0 }
+      name: train.origin.name
     },
     destination: {
       id: '',
-      name: train.destination.name,
-      coordinates: { latitude: 0, longitude: 0 }
+      name: train.destination.name
     },
     gtfsId: train.gtfsId,
     trainName: train.trainName

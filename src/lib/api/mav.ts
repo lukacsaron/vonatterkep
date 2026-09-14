@@ -3,12 +3,124 @@ import { TrainDetails, TrainStop } from '../../types';
 import { parseUIC } from '../uicParser';
 
 // Constants from reference implementations
+//
+// DEAD HOST. vim.mav-start.hu was MAV's old MobileService endpoint. It now answers
+// 404 over https and 500 over http and there is no replacement host, so every call
+// below that still points at it (getDepartures / getArrivals) is expected to fail.
+// Station data no longer comes from here - see getStations(), which uses the OTP
+// GraphQL API instead.
 const MAV_MOBILE_API_BASE = 'http://vim.mav-start.hu/VIM/PR/150225/MobileService.svc/rest';
-const MAV_EMMA_API_BASE = 'https://mavplusz.hu/otp2-backend/otp/routers/default/index/graphql'; // Correct endpoint from holavonat-app
+
+// The live MAV OpenTripPlanner 2 index API. This is the only upstream that still
+// works, and it is rate limited per host - see otpGraphQLRequest().
+const MAV_EMMA_API_BASE = 'https://mavplusz.hu/otp2-backend/otp/routers/default/index/graphql';
 
 // Authentication tokens from reference implementations
 const MAV_UAID = '2Juija1mabqr24Blkx1qkXxJ105j'; // From mav library
 const MAV_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'; // Exact from holavonat-app
+
+// GTFS feed id of MAV's own (railway) feed inside the shared OTP instance. The same
+// instance also serves BKK, regional bus operators etc., which we do not want.
+const MAV_GTFS_FEED_ID = '1';
+
+// Bounding box for the station query. Slightly wider than Hungary so that border
+// stations served by MAV trains (Wien, Kittsee, Cakovec, ...) are included.
+const MAV_STATION_BOUNDS = {
+  south: 45.5,
+  west: 16.0,
+  north: 48.7,
+  east: 23.0
+};
+
+// No upstream call may hang forever - the worker and the request handlers both
+// depend on these resolving.
+const OTP_REQUEST_TIMEOUT_MS = 20000;
+
+// mavplusz.hu rate limits per host and answers 403 with the body "host limit
+// achived" once tripped. Retrying immediately keeps the limit permanently tripped,
+// so after a 403/429 we stop calling upstream entirely for this long and let
+// callers fall back to cached data.
+const OTP_RATE_LIMIT_COOLDOWN_MS = 5 * 60 * 1000;
+
+let otpRateLimitedUntil = 0;
+
+export class OtpRateLimitedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OtpRateLimitedError';
+  }
+}
+
+export function isOtpRateLimited(): boolean {
+  return Date.now() < otpRateLimitedUntil;
+}
+
+/**
+ * Single choke point for every OTP GraphQL call.
+ *
+ * - times every request out (no unbounded hangs)
+ * - turns HTTP 403/429 into a process-wide cooldown so we never tight-loop on the
+ *   host rate limit, and logs the upstream body because it explains itself
+ * - surfaces GraphQL-level errors instead of silently returning undefined data
+ */
+async function otpGraphQLRequest<T>(query: string, label: string): Promise<T> {
+  if (isOtpRateLimited()) {
+    const waitSeconds = Math.ceil((otpRateLimitedUntil - Date.now()) / 1000);
+    throw new OtpRateLimitedError(
+      `Skipping ${label}: MAV OTP API is rate limited, backing off for another ${waitSeconds}s`
+    );
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OTP_REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(MAV_EMMA_API_BASE, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': MAV_USER_AGENT,
+      },
+      body: JSON.stringify({ query }),
+      signal: controller.signal
+    });
+
+    if (response.status === 403 || response.status === 429) {
+      const body = await response.text().catch(() => '<unreadable body>');
+      otpRateLimitedUntil = Date.now() + OTP_RATE_LIMIT_COOLDOWN_MS;
+      console.error(
+        `🚫 MAV OTP API rate limited on ${label}: HTTP ${response.status} - ${body.trim().slice(0, 200)}. ` +
+        `Pausing all upstream calls for ${OTP_RATE_LIMIT_COOLDOWN_MS / 1000}s and serving cached data.`
+      );
+      throw new OtpRateLimitedError(`MAV OTP API returned ${response.status} for ${label}`);
+    }
+
+    if (!response.ok) {
+      throw new Error(`MAV OTP API error on ${label}: HTTP ${response.status} ${response.statusText}`);
+    }
+
+    const json = await response.json() as { data?: T; errors?: Array<{ message: string }> };
+
+    if (json.errors && json.errors.length > 0) {
+      throw new Error(
+        `MAV OTP API returned GraphQL errors on ${label}: ${json.errors.map(e => e.message).join('; ')}`
+      );
+    }
+
+    if (!json.data) {
+      throw new Error(`MAV OTP API returned no data on ${label}`);
+    }
+
+    return json.data;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`MAV OTP API timed out after ${OTP_REQUEST_TIMEOUT_MS}ms on ${label}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export interface MavStation {
   Nev: string;
@@ -17,6 +129,22 @@ export interface MavStation {
     Lat: number;
     Lng: number;
   };
+  /** Platform codes reported by the OTP feed, when the station exposes any. */
+  Vaganyok?: string[];
+}
+
+interface OtpStop {
+  gtfsId: string;
+  name: string | null;
+  lat: number | null;
+  lon: number | null;
+  platformCode: string | null;
+  parentStation: {
+    gtfsId: string;
+    name: string | null;
+    lat: number | null;
+    lon: number | null;
+  } | null;
 }
 
 export interface MavTrain {
@@ -57,71 +185,83 @@ export interface MavArrival {
 }
 
 class MavApiClient {
-  // Get all stations using MobileService API
+  /**
+   * Every railway station MAV knows about, with real coordinates.
+   *
+   * Source: the OTP GraphQL index API, one single bulk query. The old
+   * MobileService station endpoint (GetAlapadatok) is dead - see
+   * MAV_MOBILE_API_BASE - and used to leave every station at 0,0.
+   *
+   * Cost: exactly ONE upstream request per call. Callers are expected to cache
+   * the result (see /api/stations, which keeps it in Redis for days); station
+   * geometry changes a handful of times a year.
+   */
   async getStations(): Promise<MavStation[]> {
-    console.log('🏢 Fetching stations from MÁV MobileService API...');
-    
-    try {
-      const payload = {
-        UAID: MAV_UAID,
-        Nyelv: 'HU'
-      };
+    const { south, west, north, east } = MAV_STATION_BOUNDS;
 
-      console.log('📡 Making stations request to:', MAV_MOBILE_API_BASE + '/GetAlapadatok');
-      console.log('📋 Payload:', payload);
-
-      const response = await fetch(`${MAV_MOBILE_API_BASE}/GetAlapadatok`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': MAV_USER_AGENT,
-        },
-        body: JSON.stringify(payload)
-      });
-
-      console.log('📶 MobileService stations response status:', response.status, response.statusText);
-
-      if (!response.ok) {
-        throw new Error(`MÁV API error: ${response.status}`);
+    // stopsByBbox is the only stop query on this schema that accepts a feed
+    // filter, which is what keeps us from downloading ~72k BKK/coach stops.
+    const stopsQuery = `{
+      stopsByBbox(minLat: ${south}, minLon: ${west}, maxLat: ${north}, maxLon: ${east}, feeds: ["${MAV_GTFS_FEED_ID}"]) {
+        gtfsId
+        name
+        lat
+        lon
+        platformCode
+        parentStation {
+          gtfsId
+          name
+          lat
+          lon
+        }
       }
+    }`;
 
-      const data = await response.json();
-      console.log('📦 MobileService stations response type:', typeof data, 'keys:', Object.keys(data || {}));
-      
-      // Try different response formats
-      let stations = (data as any)?.Allomasok || data || [];
-      
-      if (!Array.isArray(stations)) {
-        console.warn('⚠️ Unexpected stations response format:', data);
-        stations = [];
-      }
+    console.log('🏢 Fetching stations from MAV OTP GraphQL API (single bulk query)...');
 
-      const validStations = stations.filter((station: any) => 
-        station && 
-        station.UicKod && 
-        station.Nev && 
-        station.GPS?.Lat && 
-        station.GPS?.Lng
-      );
+    const data = await otpGraphQLRequest<{ stopsByBbox: OtpStop[] | null }>(stopsQuery, 'getStations');
+    const stops = data.stopsByBbox || [];
 
-      console.log(`✅ Successfully fetched ${validStations.length} valid stations from MobileService API`);
-      
-      // Check for specific stations mentioned in the issue
-      const searchStations = ['Veszprém', 'Ukk', 'Tapolca'];
-      for (const searchStation of searchStations) {
-        const found = validStations.find((s: any) => 
-          s.Nev?.toLowerCase().includes(searchStation.toLowerCase())
-        );
-        console.log(`🔍 Station "${searchStation}" found:`, found ? 
-          { name: found.Nev, uic: found.UicKod } : 'NOT FOUND'
-        );
-      }
-
-      return validStations;
-    } catch (error) {
-      console.error('❌ Failed to fetch stations from MobileService API:', error);
-      throw error;
+    if (stops.length === 0) {
+      throw new Error('MAV OTP API returned 0 stops for the MAV feed - refusing to treat that as a station list');
     }
+
+    // The feed lists one entry per platform. Collapse them onto their parent
+    // station so we end up with stations, not platforms.
+    const byStation = new Map<string, { name: string; lat: number; lon: number; platforms: Set<string> }>();
+
+    for (const stop of stops) {
+      const parent = stop.parentStation;
+      const id = parent?.gtfsId || stop.gtfsId;
+      const name = parent?.name || stop.name;
+      const lat = parent?.lat ?? stop.lat;
+      const lon = parent?.lon ?? stop.lon;
+
+      // No name or no usable position means we cannot place it on a map, and a
+      // station pinned at 0,0 is worse than a station we simply do not list.
+      if (!id || !name || typeof lat !== 'number' || typeof lon !== 'number') continue;
+      if (lat === 0 && lon === 0) continue;
+
+      let entry = byStation.get(id);
+      if (!entry) {
+        entry = { name, lat, lon, platforms: new Set<string>() };
+        byStation.set(id, entry);
+      }
+      if (stop.platformCode) entry.platforms.add(stop.platformCode);
+    }
+
+    const stations: MavStation[] = Array.from(byStation.entries()).map(([id, entry]) => ({
+      UicKod: id,
+      Nev: entry.name,
+      GPS: { Lat: entry.lat, Lng: entry.lon },
+      Vaganyok: entry.platforms.size > 0
+        ? Array.from(entry.platforms).sort((a, b) => a.localeCompare(b, 'hu', { numeric: true }))
+        : undefined
+    }));
+
+    console.log(`✅ Fetched ${stations.length} stations from OTP (${stops.length} raw stops collapsed onto parent stations)`);
+
+    return stations;
   }
 
   // Get train departures for a station
@@ -217,36 +357,20 @@ class MavApiClient {
             realtimeDeparture
             scheduledDeparture
             stop { 
+              gtfsId
               name 
               lat 
               lon 
               platformCode
+              parentStation { gtfsId }
             }
           } 
         } 
       }`;
 
-      console.log(`🔍 Fetching trip details for ${gtfsId} on ${serviceDay}`);
-      console.log(`📋 GraphQL Query:`, tripQuery);
+      const data = await otpGraphQLRequest<any>(tripQuery, `getTrainDetails(${gtfsId})`);
 
-      const response = await fetch(MAV_EMMA_API_BASE, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': MAV_USER_AGENT,
-        },
-        body: JSON.stringify({ query: tripQuery })
-      });
-
-      if (!response.ok) {
-        console.warn(`🚨 EMMA API error: ${response.status} ${response.statusText}`);
-        return null;
-      }
-
-      const data = await response.json();
-      console.log(`📦 EMMA Trip Response:`, data);
-      
-      const trip = (data as any)?.data?.trip;
+      const trip = data?.trip;
       
       // Debug TÓPART train specifically
       if (trip?.trainName?.includes('TÓPART') || trip?.tripHeadsign?.includes('TÓPART')) {
@@ -359,7 +483,7 @@ class MavApiClient {
         }
 
         return {
-          id: stoptime.stop.id, // Stop ID from EMMA API
+          id: stoptime.stop.parentStation?.gtfsId || stoptime.stop.gtfsId, // OTP stop id (parent station where available)
           name: stoptime.stop.name,
           scheduledArrival,
           actualArrival: realtimeArrival,
@@ -386,6 +510,10 @@ class MavApiClient {
       };
       
     } catch (error) {
+      if (error instanceof OtpRateLimitedError) {
+        // Already logged once by otpGraphQLRequest; do not retry, do not spam.
+        return null;
+      }
       console.warn(`Failed to get trip details for train ${gtfsId}:`, error);
       return null;
     }
@@ -403,14 +531,35 @@ class MavApiClient {
       const url = `https://mavplusz.hu/otp2-backend/otp/routers/default/index/trips/${gtfsId}/geometry`;
       console.log(`🗺️ Fetching route geometry for ${gtfsId}`);
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'User-Agent': MAV_USER_AGENT,
-        }
-      });
+      if (isOtpRateLimited()) {
+        console.warn(`⏳ Skipping geometry fetch for ${gtfsId}: MAV OTP API is rate limited`);
+        return null;
+      }
 
-      console.log(`📶 Geometry API Response status: ${response.status}`);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), OTP_REQUEST_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'User-Agent': MAV_USER_AGENT,
+          },
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (response.status === 403 || response.status === 429) {
+        const body = await response.text().catch(() => '<unreadable body>');
+        otpRateLimitedUntil = Date.now() + OTP_RATE_LIMIT_COOLDOWN_MS;
+        console.error(
+          `🚫 MAV geometry API rate limited for ${gtfsId}: HTTP ${response.status} - ${body.trim().slice(0, 200)}. ` +
+          `Pausing upstream calls for ${OTP_RATE_LIMIT_COOLDOWN_MS / 1000}s.`
+        );
+        return null;
+      }
 
       if (!response.ok) {
         console.warn(`❌ Failed to get geometry for ${gtfsId}: ${response.status}`);
@@ -603,38 +752,17 @@ class MavApiClient {
       // Basic GraphQL query for vehicle positions (stoptimes need separate calls with serviceDay)
       const vehicleQuery = `{ vehiclePositions(swLat: ${queryBounds.south}, swLon: ${queryBounds.west}, neLat: ${queryBounds.north}, neLon: ${queryBounds.east}, modes: [RAIL, RAIL_REPLACEMENT_BUS]) { trip { gtfsId tripShortName tripHeadsign } vehicleId lat lon label speed heading } }`;
 
-      const payload = {
-        query: vehicleQuery
-      };
+      const data = await otpGraphQLRequest<{ vehiclePositions: any[] | null }>(vehicleQuery, 'getTrainPositions');
 
-      console.log('📡 Making GraphQL request to:', MAV_EMMA_API_BASE);
-      console.log('📋 Query:', vehicleQuery);
+      const vehicles = data.vehiclePositions || [];
+      console.log(`✅ Successfully fetched ${vehicles.length} vehicles from OTP API`);
 
-      const response = await fetch(MAV_EMMA_API_BASE, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': MAV_USER_AGENT,
-        },
-        body: JSON.stringify(payload)
-      });
-
-      console.log('📶 EMMA API Response status:', response.status, response.statusText);
-
-      if (!response.ok) {
-        console.warn(`❌ EMMA API failed with status ${response.status}, trying alternative approach...`);
-        return await this.tryAlternativeApproach(bounds);
-      }
-
-      const data = await response.json();
-      console.log('📦 EMMA API Response data:', data);
-      
-      const vehicles = (data as any)?.data?.vehiclePositions || [];
-      console.log(`✅ Successfully fetched ${vehicles.length} vehicles from EMMA API`);
-      
       if (vehicles.length === 0) {
-        console.warn('⚠️ No vehicles returned from EMMA API, using fallback data');
-        return await this.tryAlternativeApproach(bounds);
+        // Returning invented trains here is how stale/fake data reached the map
+        // before. An empty result makes the worker keep the previous cache and
+        // lets /api/health report the data ageing.
+        console.error('❌ MAV OTP API returned 0 vehicles - keeping previously cached train data');
+        return [];
       }
       
       // Transform to our MavTrain format
@@ -703,29 +831,14 @@ class MavApiClient {
       
       return trainsWithDelays;
     } catch (error) {
-      console.error('💥 Error fetching train positions from MÁV EMMA API:', error);
-      console.log('🔄 Trying alternative approach...');
-      return await this.tryAlternativeApproach(bounds);
-    }
-  }
-
-  // Try alternative approaches if EMMA API fails
-  private async tryAlternativeApproach(bounds?: {north: number, south: number, east: number, west: number}): Promise<MavTrain[]> {
-    console.log('🔍 Trying MobileService API as alternative...');
-    
-    try {
-      // Try to get some station data to verify the API works
-      const stations = await this.getStations();
-      console.log(`📍 MobileService API working - found ${stations.length} stations`);
-      
-      // Since MobileService doesn't have real-time positions, return enhanced fallback data
-      console.log('ℹ️ MobileService API doesn\'t provide real-time positions, using enhanced fallback');
-      return this.getEnhancedFallbackTrains();
-      
-    } catch (error) {
-      console.error('💥 MobileService API also failed:', error);
-      console.log('🔄 Using basic fallback data');
-      return this.getFallbackTrains();
+      if (error instanceof OtpRateLimitedError) {
+        console.error('💥 Train position fetch skipped/failed because MAV OTP is rate limiting us. Serving cached data.');
+      } else {
+        console.error('💥 Error fetching train positions from MAV OTP API:', error);
+      }
+      // Never fabricate trains: an empty list means "no fresh data", which the
+      // worker and /api/health both handle honestly.
+      return [];
     }
   }
 
@@ -751,14 +864,11 @@ class MavApiClient {
         });
       }
       
-      // Parse UIC code for locomotive/EMU identification
-      let uicInfo = vehicle.vehicleId ? parseUIC(vehicle.vehicleId) : undefined;
-      
-      // TEMPORARY: Add test locomotive data for demo purposes
-      if (!uicInfo?.trainType && index < 3) {
-        console.log('🔧 Adding test locomotive data for demo...');
-        uicInfo = parseUIC('1:915504310018'); // Test V43 locomotive
-      }
+      // Parse UIC code for locomotive/EMU identification.
+      // If the vehicle id does not identify a locomotive, leave it undefined - a
+      // demo/placeholder locomotive class here used to be shown to users as if it
+      // were the real traction on the first three trains of every fetch.
+      const uicInfo = vehicle.vehicleId ? parseUIC(vehicle.vehicleId) : undefined;
       
       // Debug UIC parsing for first few vehicles
       if (index < 3 && uicInfo) {
@@ -803,108 +913,6 @@ class MavApiClient {
     return 'REG';
   }
 
-  // Fallback data when APIs are unavailable
-  private getFallbackTrains(): MavTrain[] {
-    console.log('🔄 Using fallback train data (MÁV APIs unavailable)');
-    return [
-      {
-        VonatSzam: '3201',
-        Tipus: 'IC',
-        Celallomas: 'Budapest-Keleti',
-        UtolsoGPS: {
-          Lat: 47.1625,
-          Lng: 19.5033,
-          Ido: new Date().toISOString(),
-          Sebesseg: 85,
-          Irany: 45
-        },
-        Keses: 3
-      },
-      {
-        VonatSzam: '4521',
-        Tipus: 'REG',
-        Celallomas: 'Debrecen',
-        UtolsoGPS: {
-          Lat: 47.5316,
-          Lng: 21.6273,
-          Ido: new Date().toISOString(),
-          Sebesseg: 62,
-          Irany: 180
-        },
-        Keses: 12
-      },
-      {
-        VonatSzam: '8901',
-        Tipus: 'S',
-        Celallomas: 'Pécs',
-        UtolsoGPS: {
-          Lat: 46.0727,
-          Lng: 18.2323,
-          Ido: new Date().toISOString(),
-          Sebesseg: 35,
-          Irany: 270
-        },
-        Keses: 0
-      }
-    ];
-  }
-
-  // Enhanced fallback with more realistic data when MobileService API is working
-  private getEnhancedFallbackTrains(): MavTrain[] {
-    console.log('✨ Using enhanced fallback train data (MobileService API verified)');
-    
-    // Generate more realistic train positions and data
-    const currentTime = new Date();
-    const trains: MavTrain[] = [];
-    
-    // Add some IC trains
-    trains.push({
-      VonatSzam: '406', // Real IC train number
-      Tipus: 'IC',
-      Celallomas: 'Debrecen',
-      UtolsoGPS: {
-        Lat: 47.4979 + (Math.random() - 0.5) * 0.1,
-        Lng: 19.0402 + (Math.random() - 0.5) * 0.1,
-        Ido: currentTime.toISOString(),
-        Sebesseg: 80 + Math.random() * 40,
-        Irany: Math.random() * 360
-      },
-      Keses: Math.floor(Math.random() * 15)
-    });
-
-    trains.push({
-      VonatSzam: '412',
-      Tipus: 'IC', 
-      Celallomas: 'Szeged',
-      UtolsoGPS: {
-        Lat: 46.8 + (Math.random() - 0.5) * 0.2,
-        Lng: 19.8 + (Math.random() - 0.5) * 0.2,
-        Ido: currentTime.toISOString(),
-        Sebesseg: 70 + Math.random() * 50,
-        Irany: Math.random() * 360
-      },
-      Keses: Math.floor(Math.random() * 20)
-    });
-
-    // Add regional trains
-    for (let i = 0; i < 8; i++) {
-      trains.push({
-        VonatSzam: (6000 + Math.floor(Math.random() * 1000)).toString(),
-        Tipus: 'REG',
-        Celallomas: ['Pécs', 'Győr', 'Miskolc', 'Szolnok', 'Békéscsaba'][Math.floor(Math.random() * 5)],
-        UtolsoGPS: {
-          Lat: 46.5 + Math.random() * 2,
-          Lng: 17.5 + Math.random() * 4,
-          Ido: currentTime.toISOString(),
-          Sebesseg: 30 + Math.random() * 60,
-          Irany: Math.random() * 360
-        },
-        Keses: Math.floor(Math.random() * 30)
-      });
-    }
-
-    return trains;
-  }
 }
 
 export const mavApi = new MavApiClient();

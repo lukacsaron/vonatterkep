@@ -43,8 +43,11 @@ export const useMapStore = create<MapState>((set) => ({
   zoomToTrain: (train) => set({ 
     selectedTrain: train,
     focusedTrain: train,
-    center: { lat: train.position.latitude, lng: train.position.longitude },
-    zoom: 7
+    // Keep the current centre when the train has no GPS fix rather than flying
+    // the map to 0,0.
+    ...(train.position
+      ? { center: { lat: train.position.latitude, lng: train.position.longitude }, zoom: 7 }
+      : {}),
   }),
 }));
 

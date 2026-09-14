@@ -9,7 +9,7 @@ import { TrainInfoModal } from '../Train/TrainInfoModal';
 import { LoadingSpinner } from '../UI/LoadingSpinner';
 import { DelayLegend } from '../UI/DelayLegend';
 import { LocationButton } from '../UI/LocationButton';
-import { Train, DelayCategory } from '@/types';
+import { Train, DelayCategory, Coordinates } from '@/types';
 import { getDelayCategory, getDelayColor, decodePolyline, formatTime } from '@/lib/utils';
 // --- ADDED: Import RefreshCw icon and cn utility ---
 import { RefreshCw } from 'lucide-react';
@@ -41,7 +41,7 @@ function TrainMapComponent() {
     trainsCount: trains?.length,
     mapError,
     mapCenter: map.current ? [map.current.getCenter().lng, map.current.getCenter().lat] : null,
-    sampleTrainPositions: trains?.slice(0, 3).map(t => [t.position.longitude, t.position.latitude])
+    sampleTrainPositions: trains?.slice(0, 3).map(t => t.position ? [t.position.longitude, t.position.latitude] : 'no position')
   });
 
   // Initialize map
@@ -166,7 +166,9 @@ function TrainMapComponent() {
     if (!trains) return [];
     
     return trains
-      .filter(train => {
+      .filter((train): train is Train & { position: Coordinates } => {
+        // A train without a GPS fix is simply not drawn - it is never placed at 0,0.
+        if (!train.position) return false;
         const coords = [train.position.longitude, train.position.latitude];
         // Validate coordinates are reasonable for Hungary
         return !(Math.abs(coords[0]) > 180 || Math.abs(coords[1]) > 90 ||
@@ -856,6 +858,11 @@ function TrainMapComponent() {
   // Handle focused train - zoom to it and clear the focused state
   useEffect(() => {
     if (!map.current || !mapReady || !focusedTrain) return;
+
+    if (!focusedTrain.position) {
+      console.warn('🎯 Cannot focus on train', focusedTrain.number, '- no GPS position available');
+      return;
+    }
 
     console.log('🎯 Focusing on train:', focusedTrain.number, 'at position:', [focusedTrain.position.longitude, focusedTrain.position.latitude]);
     

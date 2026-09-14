@@ -45,7 +45,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               station: {
                 id: stop.id || '',
                 name: stop.name,
-                coordinates: stop.coordinates || { latitude: 0, longitude: 0 }
+                coordinates: stop.coordinates
               },
               arrival: stop.scheduledArrival,
               departure: stop.scheduledDeparture,

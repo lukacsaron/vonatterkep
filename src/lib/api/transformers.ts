@@ -1,4 +1,4 @@
-import { Train, Station, Departure, TrainType, DepartureStatus, TrainSearchResult, TrainDetails } from '../../types';
+import { Train, Station, Departure, TrainType, DepartureStatus, TrainSearchResult, TrainDetails, TrainStop } from '../../types';
 import { MavStation, MavTrain, MavDeparture, MavArrival } from './mav';
 
 // Speed conversion utilities
@@ -11,100 +11,81 @@ function kmhToMs(speedKmh: number): number {
 }
 
 export function transformMavStation(mavStation: MavStation): Station {
+  const gps = mavStation.GPS;
+  // A station with no position is listed without coordinates rather than pinned
+  // at 0,0 - see the Station type.
+  const coordinates = gps && (gps.Lat !== 0 || gps.Lng !== 0)
+    ? { latitude: gps.Lat, longitude: gps.Lng }
+    : undefined;
+
   return {
     id: mavStation.UicKod,
     name: mavStation.Nev,
-    coordinates: {
-      latitude: mavStation.GPS?.Lat || 0,
-      longitude: mavStation.GPS?.Lng || 0
-    },
-    platforms: [], // MÁV API doesn't provide platform info in station list
+    coordinates,
+    platforms: mavStation.Vaganyok ?? [],
     services: [] // Would need additional API call for services
   };
 }
 
 export function transformMavTrain(mavTrain: MavTrain, trainDetails?: TrainDetails): Train {
-  // Extract origin and destination from route details if available
+  // Origin and destination come from the trip's stop list when we have it. The
+  // OTP stops carry real ids and coordinates, so use them - the previous version
+  // hardcoded a placeholder id and 0,0 coordinates for every single train.
   let origin: Station | undefined;
   let destination: Station | undefined;
-  
-  // Debug route data availability (only for selected trains)
-  if (mavTrain.VonatSzam && mavTrain.VonatSzam.includes('DEBUG_TRAIN_PLACEHOLDER')) {
-    if (trainDetails) {
-      console.log(`🔍 Transformer: Train ${mavTrain.VonatSzam} has trainDetails with ${trainDetails.stops?.length || 0} stops`);
-    } else {
-      console.log(`⚠️ Transformer: Train ${mavTrain.VonatSzam} has NO trainDetails`);
-    }
-  }
-  
-  if (trainDetails && trainDetails.stops && trainDetails.stops.length > 0) {
-    // Get origin from first stop
-    const firstStop = trainDetails.stops[0];
-    origin = {
-      id: 'unknown',
-      name: firstStop.name,
-      coordinates: { latitude: 0, longitude: 0 }
-    };
-    
-    // Get destination from last stop
-    const lastStop = trainDetails.stops[trainDetails.stops.length - 1];
-    destination = {
-      id: 'unknown', 
-      name: lastStop.name,
-      coordinates: { latitude: 0, longitude: 0 }
-    };
-    
-    // Only log for debugging specific trains
-    if (mavTrain.VonatSzam && mavTrain.VonatSzam.includes('DEBUG_TRAIN_PLACEHOLDER')) {
-      console.log(`✅ Transformer: Set origin/destination for ${mavTrain.VonatSzam}: ${origin.name} -> ${destination.name}`);
-    }
-  } else {
-    // Fallback to existing logic if no route details
-    destination = mavTrain.Celallomas ? {
-      id: 'unknown',
-      name: mavTrain.Celallomas,
-      coordinates: { latitude: 0, longitude: 0 }
-    } : undefined;
+
+  const stops = trainDetails?.stops;
+
+  if (stops && stops.length > 0) {
+    origin = stationFromStop(stops[0]);
+    destination = stationFromStop(stops[stops.length - 1]);
+  } else if (mavTrain.Celallomas && mavTrain.Celallomas !== 'Unknown') {
+    // Only a headsign string is available: keep the name, but do not invent an
+    // id or a position for it.
+    destination = { id: '', name: mavTrain.Celallomas };
   }
 
-  const train = {
+  const gps = mavTrain.UtolsoGPS;
+
+  const train: Train = {
     id: mavTrain.VonatSzam,
     number: mavTrain.VonatSzam,
     type: mapMavTrainType(mavTrain.Tipus),
-    position: {
-      latitude: mavTrain.UtolsoGPS?.Lat || 0,
-      longitude: mavTrain.UtolsoGPS?.Lng || 0
-    },
-    speed: msToKmh(mavTrain.UtolsoGPS?.Sebesseg || 0),
-    heading: mavTrain.UtolsoGPS?.Irany || 0,
+    position: gps && (gps.Lat !== 0 || gps.Lng !== 0)
+      ? { latitude: gps.Lat, longitude: gps.Lng }
+      : undefined,
+    speed: msToKmh(gps?.Sebesseg || 0),
+    heading: gps?.Irany || 0,
     delay: mavTrain.Keses || 0,
     origin,
     destination,
     // Enhanced fields
     gtfsId: mavTrain.gtfsId,
     trainName: mavTrain.trainName || trainDetails?.trainName,
-    lastUpdate: mavTrain.UtolsoGPS?.Ido ? new Date(mavTrain.UtolsoGPS.Ido) : new Date(),
-    isMoving: (mavTrain.UtolsoGPS?.Sebesseg || 0) > kmhToMs(5), // Consider moving if speed > 5 km/h (converted to m/s)
+    lastUpdate: gps?.Ido ? new Date(gps.Ido) : new Date(),
+    isMoving: (gps?.Sebesseg || 0) > kmhToMs(5), // Consider moving if speed > 5 km/h (converted to m/s)
     // UIC locomotive type detection
     locomotiveType: mavTrain.locomotiveType,
     uicInfo: mavTrain.uicInfo
   };
-  
-  // Debug coordinate transformation
-  if (mavTrain.VonatSzam && mavTrain.VonatSzam.includes('863')) {
-    console.log('🔄 Transforming train 863:', {
-      original: { lat: mavTrain.UtolsoGPS?.Lat, lng: mavTrain.UtolsoGPS?.Lng },
-      transformed: { lat: train.position.latitude, lng: train.position.longitude },
-      mapboxFormat: [train.position.longitude, train.position.latitude]
-    });
-  }
-  
-  // Log origin/destination extraction for debugging (only specific trains)
-  if (trainDetails && (origin || destination) && mavTrain.VonatSzam && mavTrain.VonatSzam.includes('DEBUG_TRAIN_PLACEHOLDER')) {
-    console.log(`🚂 Train ${mavTrain.VonatSzam} route: ${origin?.name || 'Unknown'} -> ${destination?.name || 'Unknown'}`);
-  }
-  
+
   return train;
+}
+
+/** Build a Station from a trip stop, keeping coordinates only when they are real. */
+function stationFromStop(stop: TrainStop): Station {
+  const coords = stop.coordinates;
+  const hasRealCoords = !!coords
+    && typeof coords.latitude === 'number'
+    && typeof coords.longitude === 'number'
+    && !(coords.latitude === 0 && coords.longitude === 0);
+
+  return {
+    id: stop.id || '',
+    name: stop.name,
+    coordinates: hasRealCoords ? coords : undefined,
+    platforms: stop.platform ? [stop.platform] : undefined
+  };
 }
 
 export function transformMavDeparture(mavDeparture: MavDeparture, station: Station): Departure {
@@ -122,18 +103,16 @@ export function transformMavDeparture(mavDeparture: MavDeparture, station: Stati
     time: departureTime,
     platform: mavDeparture.Vagany,
     remoteStation: {
-      id: 'unknown',
-      name: mavDeparture.Celallomas,
-      coordinates: { latitude: 0, longitude: 0 }
+      id: '',
+      name: mavDeparture.Celallomas
     },
     delay: mavDeparture.Keses || 0,
     status: getDepartureStatus(mavDeparture),
     // Legacy fields for backward compatibility
     departure: departureTime,
     destination: {
-      id: 'unknown',
-      name: mavDeparture.Celallomas,
-      coordinates: { latitude: 0, longitude: 0 }
+      id: '',
+      name: mavDeparture.Celallomas
     }
   };
 }
@@ -153,9 +132,8 @@ export function transformMavArrival(mavArrival: MavArrival, station: Station): D
     time: arrivalTime,
     platform: mavArrival.Vagany,
     remoteStation: {
-      id: 'unknown',
-      name: mavArrival.Kiindulas,
-      coordinates: { latitude: 0, longitude: 0 }
+      id: '',
+      name: mavArrival.Kiindulas
     },
     delay: mavArrival.Keses || 0,
     status: getArrivalStatus(mavArrival),
