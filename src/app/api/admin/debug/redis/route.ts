@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { redisClient } from '@/lib/redis';
+import { isAuthorizedAdmin } from '@/lib/adminAuth';
 
 export async function GET(request: NextRequest) {
   try {
-    // Check for admin auth (simple approach)
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== 'Bearer admin-debug') {
+    if (!isAuthorizedAdmin(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

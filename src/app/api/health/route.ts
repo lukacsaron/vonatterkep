@@ -17,10 +17,18 @@ export async function GET() {
       }
     };
 
-    // Check Redis connection
+    // Check Redis connection.
+    // The redis client retries internally, so an unreachable server makes ping()
+    // hang instead of rejecting - that turns this endpoint into a black hole and
+    // the container healthcheck times out. Time-box it.
     try {
       if (redisClient && typeof redisClient.ping === 'function') {
-        await redisClient.ping();
+        await Promise.race([
+          redisClient.ping(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Redis ping timed out after 2000ms')), 2000)
+          ),
+        ]);
         healthCheck.services.redis = 'connected';
       } else {
         healthCheck.services.redis = 'not_configured';
@@ -31,7 +39,10 @@ export async function GET() {
       healthCheck.status = 'degraded';
     }
 
-    const statusCode = healthCheck.status === 'healthy' ? 200 : 503;
+    // Report degraded in the body, but still answer 200: the app serves pages
+    // without Redis, and a 503 here makes the orchestrator tear down a working
+    // container over a dependency outage.
+    const statusCode = healthCheck.status === 'unhealthy' ? 503 : 200;
     
     return NextResponse.json(healthCheck, { 
       status: statusCode,

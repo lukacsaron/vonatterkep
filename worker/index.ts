@@ -218,13 +218,29 @@ async function runFetchCycle() {
     // 3. Write to Redis cache using HASH for better performance
     // First, get current train IDs to clean up removed trains
     const currentTrainIds = await redisClient.hKeys(HASH_KEY);
-    const newTrainIds = new Set(trains.map(t => t.gtfsId));
+
+    // Trains without a usable gtfsId cannot be used as a Redis hash field and
+    // make hSet throw "Cannot convert undefined or null to object", which kills
+    // the whole fetch cycle. Drop them rather than losing the cycle.
+    const trainsWithValidIds = trains.filter(
+      t => t.gtfsId && typeof t.gtfsId === 'string' && t.gtfsId.trim() !== ''
+    );
+    const skipped = trains.length - trainsWithValidIds.length;
+    if (skipped > 0) {
+      console.warn(`\u26a0\ufe0f Skipping ${skipped} train(s) without a valid gtfsId`);
+    }
+    if (trainsWithValidIds.length === 0) {
+      console.warn('No trains with valid gtfsId found. Keeping previous cache.');
+      return;
+    }
+
+    const newTrainIds = new Set(trainsWithValidIds.map(t => t.gtfsId));
     
     // Prepare pipeline for atomic operations
     const pipeline = redisClient.multi();
     
     // Add/update all trains in the HASH
-    for (const train of trains) {
+    for (const train of trainsWithValidIds) {
       pipeline.hSet(HASH_KEY, train.gtfsId, JSON.stringify(train));
     }
     
