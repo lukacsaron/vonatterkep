@@ -1,4 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
+import type { Endpoint, GetEndpoint } from './endpoints';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -14,7 +15,7 @@ export const queryClient = new QueryClient({
 // NEXT_PUBLIC_API_URL may be set to an origin with or without the /api suffix
 // (Coolify has it as "https://vasutterkep.hu"). Normalise so requests always
 // land on the API routes rather than on a page route.
-function resolveApiBase(): string {
+export function resolveApiBase(): string {
   const raw = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/+$/, '');
   if (!raw) return '/api';
   return raw.endsWith('/api') ? raw : `${raw}/api`;
@@ -29,14 +30,23 @@ export class ApiError extends Error {
   }
 }
 
-export async function fetcher<T>(
-  endpoint: string,
-  options?: RequestInit
-): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
-  
+/** Everything a caller may set per request. The endpoint owns the method. */
+export type ApiRequestOptions = Omit<RequestInit, 'method'>;
+
+/** Absolute (or base-relative) URL an endpoint resolves to. Exported for tests. */
+export function endpointUrl(endpoint: Endpoint<unknown>): string {
+  return `${API_BASE_URL}${endpoint.path}`;
+}
+
+export async function fetcher<TResponse>(
+  endpoint: Endpoint<TResponse>,
+  options?: ApiRequestOptions
+): Promise<TResponse> {
+  const url = endpointUrl(endpoint);
+
   const response = await fetch(url, {
     ...options,
+    method: endpoint.method,
     headers: {
       'Content-Type': 'application/json',
       ...options?.headers,
@@ -47,26 +57,21 @@ export async function fetcher<T>(
     throw new ApiError(response.status, await response.text());
   }
 
-  return response.json() as Promise<T>;
+  return response.json() as Promise<TResponse>;
 }
 
 export const api = {
-  get: <T>(endpoint: string) => fetcher<T>(endpoint),
-  
-  post: <T>(endpoint: string, data: unknown) =>
-    fetcher<T>(endpoint, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-    
-  put: <T>(endpoint: string, data: unknown) =>
-    fetcher<T>(endpoint, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-    
-  delete: <T>(endpoint: string) =>
-    fetcher<T>(endpoint, {
-      method: 'DELETE',
-    }),
+  /**
+   * Fetch a typed endpoint from `endpoints`. The response type comes from the
+   * endpoint definition, so there is nothing for a caller to assert.
+   */
+  get: <TResponse>(endpoint: GetEndpoint<TResponse>, options?: ApiRequestOptions) =>
+    fetcher(endpoint, options),
+
+  /** Same, for endpoints that are not GET. */
+  request: <TResponse>(endpoint: Endpoint<TResponse>, options?: ApiRequestOptions) =>
+    fetcher(endpoint, options),
 };
+
+export { endpoints } from './endpoints';
+export type { Endpoint, GetEndpoint, ResponseOf } from './endpoints';
