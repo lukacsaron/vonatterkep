@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { Linkedin, Mail, Train, Heart } from 'lucide-react';
+import { Github, Globe, Linkedin, Mail, Train, Heart } from 'lucide-react';
 import { Navbar } from '@/app/components/UI/Navbar';
 
 export default function KiVagyokPage() {
@@ -95,13 +95,31 @@ export default function KiVagyokPage() {
           {/* Contact */}
           <div className="text-center">
             <h2 className="text-2xl font-semibold text-gray-900 mb-8">Kapcsolat</h2>
-            <div className="flex justify-center space-x-6">
+            <div className="flex flex-wrap justify-center gap-4">
               <Link
                 href="mailto:aron.lukacs@gmail.com"
                 className="flex items-center px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
               >
                 <Mail className="h-5 w-5 mr-2" />
                 Email
+              </Link>
+              <Link
+                href="https://iamaron.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                <Globe className="h-5 w-5 mr-2" />
+                iamaron.com
+              </Link>
+              <Link
+                href="https://github.com/lukacsaron/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                <Github className="h-5 w-5 mr-2" />
+                GitHub
               </Link>
               <Link
                 href="https://www.linkedin.com/in/lukacsaron/"
