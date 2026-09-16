@@ -51,6 +51,34 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     console.log(`🔄 Cache miss - fetching route data from MÁV APIs for ${gtfsId}`);
     
     try {
+      // vonatinfo.mav.hu carries the timetable AND the route polyline for a
+      // train and, unlike the OTP backend, is reachable from this server. Ids
+      // stored as gtfsId are ElviraIDs, which is exactly what it expects.
+      try {
+        const viaVonatinfo = await mavApi.getRouteDetailsFromVonatinfo(gtfsId);
+        if (viaVonatinfo && viaVonatinfo.stops.length > 0) {
+          const routeDetails: RouteDetails = {
+            gtfsId,
+            geometry: viaVonatinfo.geometry,
+            stops: viaVonatinfo.stops,
+          };
+          try {
+            await redisClient.set(cacheKey, JSON.stringify(routeDetails), { EX: ROUTE_CACHE_TTL_SECONDS });
+          } catch (cacheError) {
+            console.warn(`Could not cache route for ${gtfsId}:`, cacheError);
+          }
+          return NextResponse.json(routeDetails, {
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'X-Cache-Status': 'MISS',
+              'X-Data-Source': 'vonatinfo',
+            },
+          });
+        }
+      } catch (vonatinfoError) {
+        console.warn(`vonatinfo route lookup failed for ${gtfsId}:`, vonatinfoError);
+      }
+
       // Parallel fetch of both geometry and trip details
       const [geometry, trainDetails] = await Promise.all([
         mavApi.getTrainGeometry(gtfsId),

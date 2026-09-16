@@ -106,6 +106,75 @@ async function fetchRouteDetailsWithCache(gtfsId: string): Promise<TrainDetails 
   return null;
 }
 
+
+const EARTH_RADIUS_M = 6371000;
+const toRad = (deg: number) => (deg * Math.PI) / 180;
+
+function haversineMeters(aLat: number, aLon: number, bLat: number, bLon: number): number {
+  const dLat = toRad(bLat - aLat);
+  const dLon = toRad(bLon - aLon);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
+}
+
+function bearingDegrees(aLat: number, aLon: number, bLat: number, bLon: number): number {
+  const dLon = toRad(bLon - aLon);
+  const y = Math.sin(dLon) * Math.cos(toRad(bLat));
+  const x =
+    Math.cos(toRad(aLat)) * Math.sin(toRad(bLat)) -
+    Math.sin(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.cos(dLon);
+  return (Math.atan2(y, x) * 180) / Math.PI;
+}
+
+/** Below this the sample is noise, not movement. */
+const MIN_MOVE_METERS = 50;
+/** Guards against absurd values from a long gap or a bad fix. */
+const MAX_PLAUSIBLE_KMH = 250;
+
+/**
+ * Fill in heading and speed by comparing each train with its previous position.
+ * A train that has not moved keeps its last heading rather than snapping north.
+ */
+function applyDerivedMotion(trains: Train[], previousById: Record<string, string>): void {
+  let derived = 0;
+  for (const train of trains) {
+    const key = train.gtfsId;
+    const pos = train.position;
+    if (!key || !pos) continue;
+
+    let prev: Train | undefined;
+    try {
+      prev = previousById[key] ? (JSON.parse(previousById[key]) as Train) : undefined;
+    } catch {
+      prev = undefined;
+    }
+    const prevPos = prev?.position;
+    const prevAt = prev?.lastUpdate ? Date.parse(prev.lastUpdate as unknown as string) : NaN;
+
+    if (!prevPos) continue;
+
+    const metres = haversineMeters(prevPos.latitude, prevPos.longitude, pos.latitude, pos.longitude);
+    if (metres < MIN_MOVE_METERS) {
+      // Stationary: keep the last known heading so the arrow does not reset.
+      if (typeof prev?.heading === 'number' && prev.heading !== 0) train.heading = prev.heading;
+      train.speed = 0;
+      continue;
+    }
+
+    train.heading = (bearingDegrees(prevPos.latitude, prevPos.longitude, pos.latitude, pos.longitude) + 360) % 360;
+
+    const elapsedSec = Number.isFinite(prevAt) ? (Date.now() - prevAt) / 1000 : NaN;
+    if (Number.isFinite(elapsedSec) && elapsedSec > 0) {
+      const kmh = (metres / elapsedSec) * 3.6;
+      if (kmh <= MAX_PLAUSIBLE_KMH) train.speed = Math.round(kmh);
+    }
+    derived += 1;
+  }
+  if (derived > 0) console.log(`\u{1F9ED} Derived heading/speed for ${derived} moving train(s)`);
+}
+
 async function runFetchCycle(): Promise<boolean> {
   console.log('Starting MÁV data fetch cycle...');
   try {
@@ -222,8 +291,18 @@ async function runFetchCycle(): Promise<boolean> {
     }
 
     // 3. Write to Redis cache using HASH for better performance
+    // vonatinfo reports position and delay but no heading or speed, so markers
+    // would all point due north at 0 km/h. Derive both from the previous sample.
+    let previousById: Record<string, string> = {};
+    try {
+      previousById = (await redisClient.hGetAll(HASH_KEY)) || {};
+    } catch (err) {
+      console.warn('Could not read previous train state for heading/speed:', err);
+    }
+    applyDerivedMotion(trains, previousById);
+
     // First, get current train IDs to clean up removed trains
-    const currentTrainIds = await redisClient.hKeys(HASH_KEY);
+    const currentTrainIds = Object.keys(previousById);
 
     // Trains without a usable gtfsId cannot be used as a Redis hash field and
     // make hSet throw "Cannot convert undefined or null to object", which kills

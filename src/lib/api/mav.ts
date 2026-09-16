@@ -843,8 +843,13 @@ class MavApiClient {
         const [origin, destination] = relation.split(' - ').map((x: string) => x?.trim());
         const number = String(t['@TrainNumber'] ?? '').trim();
         // The worker keys the Redis hash on gtfsId and drops anything without
-        // one, so every train needs a stable id. ElviraID is unique per run.
-        const elvira = t['@ElviraID'] ? String(t['@ElviraID']) : '';
+        // one, so every train needs a stable id. ElviraID is normally unique per
+        // run, but ~29 of 334 trains carry a malformed one - HÉV services look
+        // like "1574713#905_260916" (fine, still unique) and some arrive as bare
+        // "_260916" with an empty prefix, which would make every such train
+        // collide on a single hash key. Only accept an id with a real prefix.
+        const rawElvira = t['@ElviraID'] ? String(t['@ElviraID']).trim() : '';
+        const elvira = /^[^_]+_/.test(rawElvira) ? rawElvira : '';
 
         return {
           VonatSzam: number,
@@ -866,6 +871,132 @@ class MavApiClient {
 
       console.log(`\u2705 vonatinfo: ${trains.length} live trains (1 request, delays included)`);
       return trains;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Full route for one train from vonatinfo.mav.hu.
+   *
+   * The OTP backend is IP-blocked for this server, so trip details came back
+   * empty and the slide-in showed no timetable at all. vonatinfo returns the
+   * same information as a rendered HTML table plus an encoded polyline, keyed
+   * by ElviraID (which is what we now store as gtfsId).
+   *
+   * Row shape:
+   *   <tr class="row_past_even">      <- row_past_* means already passed
+   *     <td>7</td>                                   km
+   *     <td><a onclick="...i: '392', a: 'Rácalmás'">Rácalmás</a></td>
+   *     <td>18:39<br><span style="color:red">18:38</span></td>   scheduled / actual arrival
+   *     <td>18:39<br><span style="color:green">18:39</span></td> scheduled / actual departure
+   *     <td>3</td>                                   platform
+   */
+  async getRouteDetailsFromVonatinfo(elviraId: string): Promise<{ geometry: string; stops: TrainStop[] } | null> {
+    // A malformed id makes vonatinfo hang rather than answer, so do not ask.
+    if (!elviraId || !/^[^_]+_\d+$/.test(elviraId)) {
+      console.warn(`Skipping vonatinfo route lookup for unusable id "${elviraId}"`);
+      return null;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch(MAV_VONATINFO_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Referer': 'https://vonatinfo.mav.hu/',
+          'User-Agent': MAV_USER_AGENT,
+        },
+        body: JSON.stringify({ a: 'TRAIN', jo: { v: elviraId } }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`vonatinfo TRAIN HTTP ${response.status}`);
+
+      const payload = (await response.json()) as any;
+      const result = payload?.d?.result;
+      const rawHtml: string = result?.html || '';
+      if (!rawHtml) return null;
+
+      // Geometry: first polyline in `line`.
+      let geometry = '';
+      const line = result?.line;
+      if (Array.isArray(line) && line.length > 0 && typeof line[0]?.points === 'string') {
+        geometry = line[0].points;
+      }
+
+      // Service date from the header, e.g. "(Dunaújváros - Budapest-Kelenföld, 2026.09.16.)"
+      const dateMatch = rawHtml.match(/(\d{4})\.(\d{2})\.(\d{2})\./);
+      const baseDate = dateMatch
+        ? new Date(Number(dateMatch[1]), Number(dateMatch[2]) - 1, Number(dateMatch[3]))
+        : new Date(new Date().setHours(0, 0, 0, 0));
+
+      let dayOffset = 0;
+      let previousMinutes = -1;
+      const toDate = (hhmm: string | undefined): Date | undefined => {
+        if (!hhmm) return undefined;
+        const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
+        if (!m) return undefined;
+        const minutes = Number(m[1]) * 60 + Number(m[2]);
+        // Times are wall clock only; a service crossing midnight would otherwise
+        // jump backwards, so roll the day forward when time goes backwards.
+        if (previousMinutes >= 0 && minutes + dayOffset * 1440 < previousMinutes) dayOffset += 1;
+        previousMinutes = minutes + dayOffset * 1440;
+        const d = new Date(baseDate);
+        d.setDate(d.getDate() + dayOffset);
+        d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+        return d;
+      };
+
+      const stripTags = (x: string) => x.replace(/<[^>]+>/g, ' ').replace(/&nbsp;|\u00a0/g, ' ').trim();
+      const decode = (x: string) =>
+        x.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+
+      /** "18:39<br><span ...>18:38</span>" -> [scheduled, actual] */
+      const splitTimes = (cell: string): [string | undefined, string | undefined] => {
+        const times = (stripTags(cell).match(/\d{1,2}:\d{2}/g) || []);
+        return [times[0], times[1] ?? times[0]];
+      };
+
+      const stops: TrainStop[] = [];
+      const rowRe = /<tr[^>]*class="([^"]*)"[^>]*>([\s\S]*?)<\/tr>/g;
+      let row: RegExpExecArray | null;
+      while ((row = rowRe.exec(rawHtml)) !== null) {
+        const rowClass = row[1] || '';
+        const cells = [...row[2].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(m => m[1]);
+        if (cells.length < 5) continue;                      // header / title rows
+        const name = decode(stripTags(cells[1]));
+        if (!name) continue;
+        const idMatch = cells[1].match(/i:\s*'([^']+)'/);
+
+        const [schedArr, actArr] = splitTimes(cells[2]);
+        const [schedDep, actDep] = splitTimes(cells[3]);
+        const scheduledArrival = toDate(schedArr);
+        const actualArrival = toDate(actArr);
+        const scheduledDeparture = toDate(schedDep);
+        const actualDeparture = toDate(actDep);
+
+        const minutesBetween = (a?: Date, b?: Date) =>
+          a && b ? Math.round((b.getTime() - a.getTime()) / 60000) : 0;
+
+        stops.push({
+          id: idMatch ? idMatch[1] : undefined,
+          name,
+          scheduledArrival,
+          actualArrival,
+          scheduledDeparture,
+          actualDeparture,
+          platform: decode(stripTags(cells[4])) || '',
+          arrivalDelay: minutesBetween(scheduledArrival, actualArrival),
+          departureDelay: minutesBetween(scheduledDeparture, actualDeparture),
+          isPassed: /row_past/.test(rowClass),
+        });
+      }
+
+      if (stops.length === 0) return null;
+      console.log(`\u2705 vonatinfo route: ${stops.length} stops for ${elviraId}`);
+      return { geometry, stops };
     } finally {
       clearTimeout(timer);
     }
