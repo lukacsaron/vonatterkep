@@ -1,8 +1,6 @@
-import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { io, Socket } from 'socket.io-client';
-import { Train, Departure, TrainSearchResult, RouteDetails } from '@/types';
-import { api } from '@/lib/api/client';
+import { api, endpoints } from '@/lib/api/client';
+import type { TrainSearchQuery } from '@/lib/api/endpoints';
 
 export function useTrains() {
   const queryClient = useQueryClient();
@@ -10,7 +8,7 @@ export function useTrains() {
   // Poll for updates every 30 seconds until WebSocket is implemented
   const queryInfo = useQuery({
     queryKey: ['trains'],
-    queryFn: () => api.get<Train[]>('/trains'),
+    queryFn: () => api.get(endpoints.trains.list()),
     staleTime: 15000, // 15 seconds
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -31,7 +29,7 @@ export function useTrains() {
   //     console.log(`📡 Received ${trains.length} train updates via WebSocket.`);
   //     queryClient.setQueryData(['trains'], trains);
   //   });
-    
+
   //   socket.on('initial-data', (trains: Train[]) => {
   //       console.log(`📂 Received ${trains.length} initial trains via WebSocket.`);
   //       queryClient.setQueryData(['trains'], trains);
@@ -53,7 +51,11 @@ export function useTrains() {
 export function useTrain(trainId: string | null) {
   return useQuery({
     queryKey: ['train', trainId],
-    queryFn: () => api.get<Train>(`/trains/${trainId}`),
+    queryFn: () => {
+      // Unreachable: `enabled` keeps react-query from running this without an id.
+      if (!trainId) throw new Error('useTrain: queryFn ran without a trainId');
+      return api.get(endpoints.trains.byId(trainId));
+    },
     enabled: !!trainId,
     refetchInterval: 10000, // 10 seconds
   });
@@ -62,7 +64,11 @@ export function useTrain(trainId: string | null) {
 export function useTrainRoute(gtfsId: string | null) {
   return useQuery({
     queryKey: ['train-route', gtfsId],
-    queryFn: () => api.get<RouteDetails>(`/trains/${gtfsId}/route-details`),
+    queryFn: () => {
+      // Unreachable: `enabled` keeps react-query from running this without an id.
+      if (!gtfsId) throw new Error('useTrainRoute: queryFn ran without a gtfsId');
+      return api.get(endpoints.trains.routeDetails(gtfsId));
+    },
     enabled: !!gtfsId, // Only run the query if a gtfsId is provided
     staleTime: 5 * 60 * 1000, // Data is stale after 5 minutes, matching the backend cache
     refetchOnWindowFocus: false, // Route data is static for a trip, no need to refetch on focus
@@ -75,15 +81,13 @@ export function useTimetable(
   date?: Date
 ) {
   const dateParam = date ? date.toISOString() : undefined;
-  
+
   return useQuery({
     queryKey: ['timetable', stationId, type, dateParam],
     queryFn: () => {
-      const params = new URLSearchParams({
-        type,
-        ...(dateParam && { date: dateParam }),
-      });
-      return api.get<Departure[]>(`/stations/${stationId}/timetable?${params}`);
+      // Unreachable: `enabled` keeps react-query from running this without an id.
+      if (!stationId) throw new Error('useTimetable: queryFn ran without a stationId');
+      return api.get(endpoints.stations.timetable(stationId, { type, date }));
     },
     enabled: !!stationId,
     refetchInterval: 30000, // 30 seconds for real-time updates
@@ -93,27 +97,14 @@ export function useTimetable(
   });
 }
 
-export interface TrainSearchParams {
-  q?: string; // General search query for train number or name
-  fromStationId?: string; // UIC Code of the origin station
-  toStationId?: string; // UIC Code of the destination station
-  date?: Date; // The date to search for, defaults to today
-}
+export type TrainSearchParams = TrainSearchQuery;
 
 export function useTrainSearch(params: TrainSearchParams) {
-  const searchParams = new URLSearchParams();
-  
-  if (params.q) searchParams.set('q', params.q);
-  if (params.fromStationId) searchParams.set('fromStationId', params.fromStationId);
-  if (params.toStationId) searchParams.set('toStationId', params.toStationId);
-  if (params.date) searchParams.set('date', params.date.toISOString().split('T')[0]); // YYYY-MM-DD format
-  
   const queryKey = ['trains', 'search', params];
-  const queryString = searchParams.toString();
-  
+
   return useQuery({
     queryKey,
-    queryFn: () => api.get<TrainSearchResult[]>(`/trains/search?${queryString}`),
+    queryFn: () => api.get(endpoints.trains.search(params)),
     enabled: !!(params.q || params.fromStationId || params.toStationId), // Only fetch if we have search criteria
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
@@ -124,7 +115,7 @@ export function useTrainSearch(params: TrainSearchParams) {
 export function useFeaturedTrains() {
   return useQuery({
     queryKey: ['trains', 'featured'],
-    queryFn: () => api.get<TrainSearchResult[]>('/trains/search?featured=true'),
+    queryFn: () => api.get(endpoints.trains.featured()),
     staleTime: 10 * 60 * 1000, // 10 minutes - featured trains don't change often
     refetchOnWindowFocus: false,
   });

@@ -4,6 +4,7 @@ import { TrainTypeBadge } from '../UI/TrainTypeBadge';
 import { DelayIndicator } from '../UI/DelayIndicator';
 import { MapPin, Navigation, Clock, Gauge, X, Zap, Settings, Thermometer, ChevronDown, ChevronRight } from 'lucide-react';
 import { formatTime } from '@/lib/utils';
+import { api, endpoints, ApiError } from '@/lib/api/client';
 import { useState, useEffect, useRef } from 'react';
 import { 
   getTrainTypeEmoji, 
@@ -118,19 +119,18 @@ export function TrainInfoCard({ train, onClose, disableClickOutside = false }: T
         setLoading(true);
         try {
           console.log(`🔍 Fetching enhanced train details for ${train.gtfsId} via client API`);
-          
-          const response = await fetch(`/api/trains/${encodeURIComponent(train.gtfsId)}`);
-          
-          if (!response.ok) {
-            console.warn(`Failed to fetch trip details: ${response.status} ${response.statusText}`);
-            return;
-          }
-          
-          const details: Train = await response.json();
+
+          // Goes through the typed client so there is exactly one place that
+          // knows how our API URLs are built (and one place that encodes ids).
+          const details = await api.get(endpoints.trains.byId(train.gtfsId));
           console.log(`✅ Received enhanced train details:`, details);
           setTrainDetails(details);
         } catch (error) {
-          console.error('Failed to fetch train details:', error);
+          if (error instanceof ApiError) {
+            console.warn(`Failed to fetch trip details: ${error.status}`);
+          } else {
+            console.error('Failed to fetch train details:', error);
+          }
         } finally {
           setLoading(false);
         }
