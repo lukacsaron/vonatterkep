@@ -397,6 +397,30 @@ class MavApiClient {
 
   // Get full trip details including all stops and delays
   async getTrainDetails(gtfsId: string): Promise<TrainDetails | null> {
+    // vonatinfo first: it is reachable from this server (the OTP host is
+    // IP-blocked) and ids stored as gtfsId are ElviraIDs, which is what it
+    // expects. Without this /api/trains/[gtfsId] returns a train with no route
+    // and the slide-in shows no timetable at all.
+    try {
+      const viaVonatinfo = await this.getRouteDetailsFromVonatinfo(gtfsId);
+      if (viaVonatinfo && viaVonatinfo.stops.length > 0) {
+        const stops = viaVonatinfo.stops;
+        const last = stops[stops.length - 1];
+        // Overall delay: the latest real delay seen along the route so far.
+        const passed = stops.filter(st => st.isPassed);
+        const overallDelay = passed.length
+          ? (passed[passed.length - 1].arrivalDelay || passed[passed.length - 1].departureDelay || 0)
+          : 0;
+        return {
+          destination: last?.name || '',
+          overallDelay,
+          stops,
+        };
+      }
+    } catch (error) {
+      console.warn(`vonatinfo trip lookup failed for ${gtfsId}:`, error);
+    }
+
     try {
       const today = new Date();
       const serviceDay = today.toISOString().split('T')[0]; // "YYYY-MM-DD" format like holavonat
@@ -835,7 +859,13 @@ class MavApiClient {
         return [];
       }
 
-      const creationTime: string = result?.['@CreationTime'] || new Date().toISOString();
+      // @CreationTime is Hungarian wall clock ("2026.09.16 19:06:38") with no
+      // zone, so new Date() on it resolves against the SERVER's timezone. On a
+      // UTC host that lands two hours in the future, which made lastUpdate a
+      // future timestamp, elapsed time negative (so speed was never derived)
+      // and data-age reporting meaningless. The feed is fetched live, so the
+      // fetch instant is both accurate and unambiguous.
+      const creationTime: string = new Date().toISOString();
 
       const trains = list.map((t): MavTrain => {
         const relation: string = t['@Relation'] || '';
@@ -932,20 +962,43 @@ class MavApiClient {
         ? new Date(Number(dateMatch[1]), Number(dateMatch[2]) - 1, Number(dateMatch[3]))
         : new Date(new Date().setHours(0, 0, 0, 0));
 
+      // Rollover is driven by the SCHEDULED sequence only, which is monotonic
+      // along the route. Deriving it from scheduled and actual together made a
+      // train running one minute early look like it had gone backwards a day,
+      // producing a 1439 minute "delay".
       let dayOffset = 0;
-      let previousMinutes = -1;
-      const toDate = (hhmm: string | undefined): Date | undefined => {
-        if (!hhmm) return undefined;
-        const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
-        if (!m) return undefined;
-        const minutes = Number(m[1]) * 60 + Number(m[2]);
-        // Times are wall clock only; a service crossing midnight would otherwise
-        // jump backwards, so roll the day forward when time goes backwards.
-        if (previousMinutes >= 0 && minutes + dayOffset * 1440 < previousMinutes) dayOffset += 1;
-        previousMinutes = minutes + dayOffset * 1440;
+      let previousScheduledAbs = -1;
+      const HALF_DAY_MS = 12 * 60 * 60 * 1000;
+
+      const parseHm = (hhmm: string | undefined): [number, number] | null => {
+        const m = hhmm?.match(/^(\d{1,2}):(\d{2})$/);
+        return m ? [Number(m[1]), Number(m[2])] : null;
+      };
+
+      const scheduledToDate = (hhmm: string | undefined): Date | undefined => {
+        const hm = parseHm(hhmm);
+        if (!hm) return undefined;
+        const minutes = hm[0] * 60 + hm[1];
+        if (previousScheduledAbs >= 0 && minutes + dayOffset * 1440 < previousScheduledAbs) dayOffset += 1;
+        previousScheduledAbs = minutes + dayOffset * 1440;
         const d = new Date(baseDate);
         d.setDate(d.getDate() + dayOffset);
-        d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+        d.setHours(hm[0], hm[1], 0, 0);
+        return d;
+      };
+
+      // The actual time is anchored to its own scheduled time, then nudged by a
+      // whole day only if that is the only way it can be within 12 hours of it.
+      const actualToDate = (hhmm: string | undefined, scheduled: Date | undefined): Date | undefined => {
+        const hm = parseHm(hhmm);
+        if (!hm) return undefined;
+        const anchor = scheduled ?? (() => { const d = new Date(baseDate); d.setDate(d.getDate() + dayOffset); return d; })();
+        const d = new Date(anchor);
+        d.setHours(hm[0], hm[1], 0, 0);
+        if (scheduled) {
+          if (d.getTime() - scheduled.getTime() > HALF_DAY_MS) d.setDate(d.getDate() - 1);
+          else if (scheduled.getTime() - d.getTime() > HALF_DAY_MS) d.setDate(d.getDate() + 1);
+        }
         return d;
       };
 
@@ -972,10 +1025,10 @@ class MavApiClient {
 
         const [schedArr, actArr] = splitTimes(cells[2]);
         const [schedDep, actDep] = splitTimes(cells[3]);
-        const scheduledArrival = toDate(schedArr);
-        const actualArrival = toDate(actArr);
-        const scheduledDeparture = toDate(schedDep);
-        const actualDeparture = toDate(actDep);
+        const scheduledArrival = scheduledToDate(schedArr);
+        const actualArrival = actualToDate(actArr, scheduledArrival);
+        const scheduledDeparture = scheduledToDate(schedDep);
+        const actualDeparture = actualToDate(actDep, scheduledDeparture);
 
         const minutesBetween = (a?: Date, b?: Date) =>
           a && b ? Math.round((b.getTime() - a.getTime()) / 60000) : 0;
