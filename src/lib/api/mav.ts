@@ -13,6 +13,11 @@ const MAV_MOBILE_API_BASE = 'http://vim.mav-start.hu/VIM/PR/150225/MobileService
 
 // The live MAV OpenTripPlanner 2 index API. This is the only upstream that still
 // works, and it is rate limited per host - see otpGraphQLRequest().
+// MÁV's own public train tracker. Unlike mavplusz.hu (the MÁVPlusz/EMMA OTP
+// backend) this host does not IP-block our server, and one 9 KB request returns
+// every running train with its delay already attached.
+const MAV_VONATINFO_API = 'https://vonatinfo.mav.hu/map.aspx/getData';
+
 const MAV_EMMA_API_BASE = 'https://mavplusz.hu/otp2-backend/otp/routers/default/index/graphql';
 
 // Authentication tokens from reference implementations
@@ -792,7 +797,92 @@ class MavApiClient {
   }
 
   // Get real-time train positions using EMMA API (exact approach from holavonat-app)
+  /**
+   * Live positions from vonatinfo.mav.hu.
+   *
+   * Returns every running train in one ~9 KB response with @Delay already
+   * included, so there is no per-train delay lookup and no bbox paging.
+   * Fields are @-prefixed because the payload is XML converted to JSON.
+   */
+  private async getTrainPositionsFromVonatinfo(): Promise<MavTrain[]> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch(MAV_VONATINFO_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Referer': 'https://vonatinfo.mav.hu/',
+          'User-Agent': MAV_USER_AGENT,
+        },
+        body: JSON.stringify({ a: 'TRAINS', jo: { history: false, id: '' } }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`vonatinfo HTTP ${response.status}`);
+      }
+
+      // The endpoint is an ASP.NET web service: the body is wrapped in `d`.
+      const payload = (await response.json()) as any;
+      const result = payload?.d?.result;
+      const raw = result?.Trains?.Train;
+      const list: any[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+
+      if (list.length === 0) {
+        console.warn('vonatinfo returned no trains');
+        return [];
+      }
+
+      const creationTime: string = result?.['@CreationTime'] || new Date().toISOString();
+
+      const trains = list.map((t): MavTrain => {
+        const relation: string = t['@Relation'] || '';
+        // "Wien Westbf - Chop" -> origin / destination
+        const [origin, destination] = relation.split(' - ').map((x: string) => x?.trim());
+        const number = String(t['@TrainNumber'] ?? '').trim();
+        // The worker keys the Redis hash on gtfsId and drops anything without
+        // one, so every train needs a stable id. ElviraID is unique per run.
+        const elvira = t['@ElviraID'] ? String(t['@ElviraID']) : '';
+
+        return {
+          VonatSzam: number,
+          Tipus: t['@Menetvonal'] || 'MAV',
+          Celallomas: destination || relation || '',
+          UtolsoGPS: {
+            Lat: Number(t['@Lat']),
+            Lng: Number(t['@Lon']),
+            Ido: creationTime,
+            Sebesseg: 0,
+            Irany: 0,
+          },
+          Keses: Number(t['@Delay']) || 0,
+          gtfsId: elvira || (number ? `vonatinfo:${number}` : undefined),
+          trainName: relation || undefined,
+          vehicleId: elvira || undefined,
+        };
+      }).filter(t => Number.isFinite(t.UtolsoGPS!.Lat) && Number.isFinite(t.UtolsoGPS!.Lng));
+
+      console.log(`\u2705 vonatinfo: ${trains.length} live trains (1 request, delays included)`);
+      return trains;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async getTrainPositions(bounds?: {north: number, south: number, east: number, west: number}): Promise<MavTrain[]> {
+    // vonatinfo.mav.hu is the primary source: it is MÁV's own tracker, it is not
+    // IP-blocked, and it answers with every train and its delay in one request.
+    // The OTP backend stays as a fallback for when vonatinfo is unavailable.
+    try {
+      const viaVonatinfo = await this.getTrainPositionsFromVonatinfo();
+      if (viaVonatinfo.length > 0) return viaVonatinfo;
+      console.warn('vonatinfo returned nothing, falling back to the OTP backend');
+    } catch (error) {
+      console.error('vonatinfo failed, falling back to the OTP backend:', error);
+    }
+
     console.log('🚂 Attempting to fetch real-time train data from MÁV EMMA API...');
     
     try {

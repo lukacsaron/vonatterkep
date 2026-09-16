@@ -7,11 +7,14 @@ import { LoadingSpinner } from '@/app/components/UI/LoadingSpinner';
 import { MapSelector } from '@/app/components/Map/MapSelector';
 import { useMapStore } from '@/lib/store';
 import { useTrains } from '@/lib/hooks/useTrains';
+import { getDataFreshness } from '@/lib/dataFreshness';
+import { StaleDataBanner } from '@/app/components/UI/StaleDataBanner';
 
 function HomeContent() {
   const searchParams = useSearchParams();
   const { data: trains } = useTrains();
   const { setSelectedTrain, setFocusedTrain } = useMapStore();
+  const freshness = getDataFreshness(trains);
 
   useEffect(() => {
     const trainParam = searchParams.get('train');
@@ -28,6 +31,7 @@ function HomeContent() {
     <div className="flex flex-col h-screen bg-white">
       <Navbar />
       <main className="flex-1 relative bg-gray-50">
+        <StaleDataBanner freshness={freshness} />
         <MapSelector />
       </main>
     </div>
