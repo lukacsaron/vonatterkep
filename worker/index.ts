@@ -6,6 +6,14 @@ if (process.env.NODE_ENV !== 'production') {
 import { mavApi } from '../src/lib/api/mav';
 import { transformMavTrain } from '../src/lib/api/transformers';
 import { Train, TrainDetails } from '../src/types';
+import {
+  SNAPSHOT_TTL_SECONDS,
+  TRAIN_SNAPSHOT_KEY,
+  WORKER_VEHICLE_MAX_AGE_MS,
+  buildSnapshot,
+  filterFreshTrains,
+  pruneStaleVehicles,
+} from '../src/lib/trainSnapshot';
 
 // Dynamic import of redisClient after environment is loaded
 const { redisClient } = require('../src/lib/redis');
@@ -24,6 +32,7 @@ const REDIS_CHANNEL = 'trains:updates';
 // permanently inside the penalty window. Keep the per-cycle budget small; the
 // route cache fills in over successive cycles instead.
 const MAX_ROUTE_FETCHES_PER_CYCLE = parseInt(process.env.WORKER_MAX_ROUTE_FETCHES || '8', 10);
+const VEHICLE_MAX_AGE_MINUTES = Math.round(WORKER_VEHICLE_MAX_AGE_MS / 60000);
 
 // In-memory cache for route details to avoid excessive Redis operations
 const routeCache = new Map<string, { data: TrainDetails; timestamp: number }>();
@@ -290,6 +299,29 @@ async function runFetchCycle(): Promise<boolean> {
         return false;
     }
 
+    // Never publish a vehicle whose own fix is already ancient. The feed normally
+    // stamps every train with the fetch instant, so this drops nothing - but if
+    // upstream ever starts replaying old positions, they stop here rather than
+    // being rendered as live.
+    const { fresh: freshTrains, dropped: staleFromFeed } = filterFreshTrains(
+      trains,
+      Date.now(),
+      WORKER_VEHICLE_MAX_AGE_MS
+    );
+    if (staleFromFeed > 0) {
+      console.warn(
+        `⚠️ Dropped ${staleFromFeed}/${trains.length} train(s) with a lastUpdate older than ` +
+        `${VEHICLE_MAX_AGE_MINUTES} min (or no usable timestamp)`
+      );
+    }
+    if (freshTrains.length === 0) {
+      console.warn(
+        `MÁV API returned ${trains.length} train(s) but none inside the ${VEHICLE_MAX_AGE_MINUTES} min ` +
+        'freshness window. Treating the cycle as failed.'
+      );
+      return false;
+    }
+
     // 3. Write to Redis cache using HASH for better performance
     // vonatinfo reports position and delay but no heading or speed, so markers
     // would all point due north at 0 km/h. Derive both from the previous sample.
@@ -299,7 +331,7 @@ async function runFetchCycle(): Promise<boolean> {
     } catch (err) {
       console.warn('Could not read previous train state for heading/speed:', err);
     }
-    applyDerivedMotion(trains, previousById);
+    applyDerivedMotion(freshTrains, previousById);
 
     // First, get current train IDs to clean up removed trains
     const currentTrainIds = Object.keys(previousById);
@@ -307,10 +339,10 @@ async function runFetchCycle(): Promise<boolean> {
     // Trains without a usable gtfsId cannot be used as a Redis hash field and
     // make hSet throw "Cannot convert undefined or null to object", which kills
     // the whole fetch cycle. Drop them rather than losing the cycle.
-    const trainsWithValidIds = trains.filter(
+    const trainsWithValidIds = freshTrains.filter(
       t => t.gtfsId && typeof t.gtfsId === 'string' && t.gtfsId.trim() !== ''
     );
-    const skipped = trains.length - trainsWithValidIds.length;
+    const skipped = freshTrains.length - trainsWithValidIds.length;
     if (skipped > 0) {
       console.warn(`\u26a0\ufe0f Skipping ${skipped} train(s) without a valid gtfsId`);
     }
@@ -340,15 +372,34 @@ async function runFetchCycle(): Promise<boolean> {
     await pipeline.exec();
     
     // 4. Also update the legacy cache key for backward compatibility
-    const jsonData = JSON.stringify(trains);
+    const jsonData = JSON.stringify(freshTrains);
     await redisClient.set(CACHE_KEY, jsonData, {
       EX: CACHE_TTL_SECONDS,
     });
-    
-    // 5. Publish update notification
+
+    // 5. Write the last known-good snapshot. This is the point of the whole
+    // exercise: serving is now decoupled from fetching, so an upstream outage
+    // degrades to "here is what we had at 14:03" instead of silently ageing the
+    // live hash. Only a SUCCESSFUL cycle gets here, so the snapshot is never
+    // overwritten with a partial or empty result. A snapshot failure is logged,
+    // not fatal - the live hash is already written and the cycle did its job.
+    try {
+      const snapshot = buildSnapshot(trainsWithValidIds);
+      await redisClient.set(TRAIN_SNAPSHOT_KEY, JSON.stringify(snapshot), {
+        EX: SNAPSHOT_TTL_SECONDS,
+      });
+      console.log(
+        `\u{1F4F8} Snapshot ${TRAIN_SNAPSHOT_KEY}: ${snapshot.count} trains @ ${snapshot.generatedAt} ` +
+        `(expires in ${SNAPSHOT_TTL_SECONDS}s)`
+      );
+    } catch (snapshotError) {
+      console.warn('Failed to write train snapshot:', snapshotError);
+    }
+
+    // 6. Publish update notification
     await redisClient.publish(REDIS_CHANNEL, 'new-data');
-    
-    console.log(`Successfully cached ${trains.length} trains and published update.`);
+
+    console.log(`Successfully cached ${trainsWithValidIds.length} trains and published update.`);
     return true;
 
   } catch (error) {
@@ -380,6 +431,20 @@ async function scheduleNextCycle() {
     console.error('Unhandled error escaping fetch cycle:', err);
   }
 
+  // Runs whether or not the fetch succeeded - a failed cycle is exactly when the
+  // hash needs draining, and that is the case the old code never handled.
+  try {
+    const { pruned, remaining } = await pruneStaleVehicles(redisClient, HASH_KEY);
+    if (pruned > 0) {
+      console.warn(
+        `\u{1F9F9} Pruned ${pruned} vehicle(s) older than ${VEHICLE_MAX_AGE_MINUTES} min from ${HASH_KEY} ` +
+        `(${remaining} left)`
+      );
+    }
+  } catch (err) {
+    console.warn('Stale vehicle prune failed:', err);
+  }
+
   if (ok) {
     if (consecutiveFailures > 0) {
       console.log(`\u2705 Upstream recovered after ${consecutiveFailures} failed cycle(s).`);
@@ -401,7 +466,8 @@ async function scheduleNextCycle() {
 
 console.log(
   `Background worker started. Base interval ${FETCH_INTERVAL_MS / 1000}s, ` +
-  `max ${MAX_ROUTE_FETCHES_PER_CYCLE} route fetches/cycle, route cache ${ROUTE_CACHE_TTL_SECONDS}s.`
+  `max ${MAX_ROUTE_FETCHES_PER_CYCLE} route fetches/cycle, route cache ${ROUTE_CACHE_TTL_SECONDS}s, ` +
+  `vehicle max age ${VEHICLE_MAX_AGE_MINUTES} min (snapshot -> ${TRAIN_SNAPSHOT_KEY}).`
 );
 
 // Wait a bit for Redis connection to establish, then start
