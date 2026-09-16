@@ -11,6 +11,7 @@ import { DelayLegend } from '../UI/DelayLegend';
 import { LocationButton } from '../UI/LocationButton';
 import { Train, DelayCategory, Coordinates } from '@/types';
 import { getDelayCategory, getDelayColor, decodePolyline, formatTime } from '@/lib/utils';
+import { decodeRoutePolyline, resolveRouteDirection, snapToRoute } from '@/lib/geo/snapToRoute';
 // --- ADDED: Import RefreshCw icon and cn utility ---
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -161,6 +162,29 @@ function TrainMapComponent() {
   const trainColorsCache = useRef<Map<string, { delay: number, color: string, category: DelayCategory }>>(new Map());
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // --- Snap-to-track, for the selected train only ---------------------------
+  //
+  // Raw MAV GPS sits beside the rails rather than on them. We project it onto the
+  // trip's route polyline, which the detail view has already fetched and cached.
+  // Deliberately limited to the one selected train: every other train would mean
+  // one upstream geometry request each, ~330 per refresh cycle, which is exactly
+  // the traffic pattern that got this server IP-blocked by MAV before. Nothing
+  // here issues a request of its own.
+  const selectedTrainId = selectedTrain?.id ?? null;
+
+  const selectedRoutePath = useMemo(
+    () => decodeRoutePolyline(routeDetails?.geometry),
+    [routeDetails?.geometry]
+  );
+
+  // MAV hands back *line* geometry, which is not guaranteed to run in the train's
+  // direction of travel, so heading alone cannot tell two anti-parallel legs apart.
+  // The trip's stops, in schedule order, settle it when they carry coordinates.
+  const selectedRouteDirection = useMemo(
+    () => resolveRouteDirection(selectedRoutePath, (routeDetails?.stops ?? []).map(stop => stop.coordinates)),
+    [selectedRoutePath, routeDetails?.stops]
+  );
+
   // Memoize expensive GeoJSON features creation
   const geoJsonFeatures = useMemo(() => {
     if (!trains) return [];
@@ -178,6 +202,27 @@ function TrainMapComponent() {
       .map(train => {
         // Stable delay calculation to prevent flickering
         const stableDelay = Math.round(train.delay);
+
+        // Only the selected train is snapped, and only when the projection lands
+        // within the module's distance ceiling. Everything else keeps raw GPS.
+        let coordinates: [number, number] = [train.position.longitude, train.position.latitude];
+        if (selectedTrainId && train.id === selectedTrainId && selectedRoutePath.length > 1) {
+          const snap = snapToRoute(train.position, selectedRoutePath, {
+            heading: train.heading,
+            routeDirection: selectedRouteDirection,
+          });
+          if (snap.snapped) {
+            coordinates = snap.position;
+          }
+          console.log('📍 Snap-to-track', train.number, {
+            snapped: snap.snapped,
+            reason: snap.reason,
+            offsetMeters: Math.round(snap.offsetMeters),
+            segmentIndex: snap.segmentIndex,
+            headingUsed: snap.headingUsed,
+            routeDirection: selectedRouteDirection,
+          });
+        }
         
         // Use memoized color calculation to prevent flickering
         let cachedColor = trainColorsCache.current.get(train.id);
@@ -202,11 +247,11 @@ function TrainMapComponent() {
           },
           geometry: {
             type: 'Point' as const,
-            coordinates: [train.position.longitude, train.position.latitude]
+            coordinates
           }
         };
       });
-  }, [trains]);
+  }, [trains, selectedTrainId, selectedRoutePath, selectedRouteDirection]);
 
   // Update train positions using GeoJSON layer instead of individual markers
   useEffect(() => {
