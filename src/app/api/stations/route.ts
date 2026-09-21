@@ -3,6 +3,8 @@ import { redisClient } from '@/lib/redis';
 import { mavApi, MavStation, OtpRateLimitedError } from '@/lib/api/mav';
 import { transformMavStation } from '@/lib/api/transformers';
 import { Station } from '@/types';
+import { loadGtfsStations } from '@/lib/gtfs/stations';
+import { withTimeout } from '@/lib/trainSnapshot';
 
 const CACHE_KEY = 'cache:stations:all';
 
@@ -123,9 +125,18 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const search = searchParams.get('search');
 
-  let stations: Station[] | null = await readCache();
-  const cacheHit = stations !== null;
-  let source: 'cache' | 'upstream' | 'fallback' = 'cache';
+  // MÁV's GTFS feed is the primary station source: every stop with coordinates,
+  // refreshed daily by the worker, no upstream call per request. The OTP path
+  // and the hardcoded list below remain as fallbacks for a cold start.
+  let stations: Station[] | null = await withTimeout(loadGtfsStations(redisClient), 'gtfs stations', 2000).catch(() => null);
+  let source: 'gtfs' | 'cache' | 'upstream' | 'fallback' = 'gtfs';
+  let cacheHit = stations !== null;
+
+  if (!stations) {
+    stations = await readCache();
+    cacheHit = stations !== null;
+    source = 'cache';
+  }
 
   if (!stations) {
     try {

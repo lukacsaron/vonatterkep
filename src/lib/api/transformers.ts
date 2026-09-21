@@ -94,6 +94,9 @@ export function transformMavDeparture(mavDeparture: MavDeparture, station: Stati
     train: {
       id: mavDeparture.VonatSzam,
       number: mavDeparture.VonatSzam,
+      // Same ElviraID the live positions feed uses as gtfsId, so the station
+      // page can open this train on the map.
+      gtfsId: mavDeparture.elviraId,
       type: mapMavTrainType(mavDeparture.Tipus),
       position: station.coordinates,
       speed: 0,
@@ -123,6 +126,9 @@ export function transformMavArrival(mavArrival: MavArrival, station: Station): D
     train: {
       id: mavArrival.VonatSzam,
       number: mavArrival.VonatSzam,
+      // Same ElviraID the live positions feed uses as gtfsId, so the station
+      // page can open this train on the map.
+      gtfsId: mavArrival.elviraId,
       type: mapMavTrainType(mavArrival.Tipus),
       position: station.coordinates,
       speed: 0,
@@ -237,10 +243,23 @@ function parseTimeString(timeStr: string): Date {
   return now;
 }
 
+/**
+ * When the train actually leaves, not when it was scheduled to: comparing the
+ * scheduled time marked a train running 20 minutes late as DEPARTED while it
+ * was still standing at the platform.
+ */
+function effectiveTime(scheduledIso: string, actualIso: string | undefined, delayMinutes: number): Date {
+  if (actualIso) {
+    const actual = new Date(actualIso);
+    if (!isNaN(actual.getTime())) return actual;
+  }
+  return new Date(parseTimeString(scheduledIso).getTime() + delayMinutes * 60000);
+}
+
 function getDepartureStatus(mavDeparture: MavDeparture): DepartureStatus {
   const delay = mavDeparture.Keses || 0;
   const now = new Date();
-  const departureTime = parseTimeString(mavDeparture.Indulas);
+  const departureTime = effectiveTime(mavDeparture.Indulas, mavDeparture.actualTime, delay);
   
   if (departureTime < now) {
     return DepartureStatus.DEPARTED;
@@ -256,7 +275,7 @@ function getDepartureStatus(mavDeparture: MavDeparture): DepartureStatus {
 function getArrivalStatus(mavArrival: MavArrival): DepartureStatus {
   const delay = mavArrival.Keses || 0;
   const now = new Date();
-  const arrivalTime = parseTimeString(mavArrival.Erkezes);
+  const arrivalTime = effectiveTime(mavArrival.Erkezes, mavArrival.actualTime, delay);
   
   if (arrivalTime < now) {
     return DepartureStatus.DEPARTED; // Use DEPARTED to indicate "ARRIVED"

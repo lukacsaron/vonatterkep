@@ -19,7 +19,8 @@ function HomeContent() {
   useEffect(() => {
     const trainParam = searchParams.get('train');
     if (trainParam && trains) {
-      const train = trains.find(t => t.id === trainParam);
+      // ?train= may carry the train number or its ElviraID (station board links).
+      const train = trains.find(t => t.id === trainParam || t.gtfsId === trainParam);
       if (train) {
         setSelectedTrain(train);
         setFocusedTrain(train);

@@ -6,6 +6,7 @@ if (process.env.NODE_ENV !== 'production') {
 import { mavApi } from '../src/lib/api/mav';
 import { transformMavTrain } from '../src/lib/api/transformers';
 import { Train, TrainDetails } from '../src/types';
+import { isGtfsRefreshDue, refreshGtfsStations } from '../src/lib/gtfs/stations';
 import {
   SNAPSHOT_TTL_SECONDS,
   TRAIN_SNAPSHOT_KEY,
@@ -475,3 +476,35 @@ setTimeout(() => {
   console.log('Starting initial fetch cycle...');
   scheduleNextCycle();
 }, 2000);
+
+// --- GTFS station list -------------------------------------------------------
+// MÁV regenerates its GTFS feed nightly. Check hourly, download only when the
+// stored copy is older than ~20h: one download a day, and a failed run retries
+// within the hour instead of waiting a whole day.
+const GTFS_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+let gtfsCredentialsWarned = false;
+
+async function refreshGtfsIfDue(): Promise<void> {
+  if (!process.env.MAV_GTFS_USER || !process.env.MAV_GTFS_PASSWORD) {
+    if (!gtfsCredentialsWarned) {
+      console.warn('MAV_GTFS_USER / MAV_GTFS_PASSWORD not set - station list stays on the fallback source.');
+      gtfsCredentialsWarned = true;
+    }
+    return;
+  }
+  try {
+    if (!(await isGtfsRefreshDue(redisClient))) return;
+    const started = Date.now();
+    const meta = await refreshGtfsStations(redisClient);
+    console.log(
+      `\u{1F5C2}\uFE0F GTFS stations refreshed: ${meta.stationCount} stations, feed ${meta.feedVersion ?? 'unknown'}, ` +
+      `${Date.now() - started} ms`
+    );
+  } catch (error) {
+    // The previous list stays in Redis (long TTL), so a failure degrades nothing.
+    console.error('GTFS station refresh failed - keeping the previous station list:', error);
+  }
+}
+
+setTimeout(refreshGtfsIfDue, 10_000);
+setInterval(refreshGtfsIfDue, GTFS_CHECK_INTERVAL_MS);

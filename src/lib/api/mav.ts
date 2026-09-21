@@ -1,6 +1,8 @@
 // MÁV API integration based on reference implementations
 import { TrainDetails, TrainStop } from '../../types';
 import { parseUIC } from '../uicParser';
+import { budapestToday, vonatinfoDateParam } from '../time/budapest';
+import { CalendarDate, createRouteSequencer, nearestTo, atDay, parseClock } from '../time/wallClock';
 
 // Constants from reference implementations
 //
@@ -178,6 +180,10 @@ export interface MavDeparture {
   Vagany?: string;
   Keses: number;
   Tipus: string;
+  /** vonatinfo ElviraID of the train, when known - same id the live feed uses as gtfsId. */
+  elviraId?: string;
+  /** Actual (realtime) time as an ISO instant, when reported. */
+  actualTime?: string;
 }
 
 export interface MavArrival {
@@ -187,6 +193,10 @@ export interface MavArrival {
   Vagany?: string;
   Keses: number;
   Tipus: string;
+  /** vonatinfo ElviraID of the train, when known - same id the live feed uses as gtfsId. */
+  elviraId?: string;
+  /** Actual (realtime) time as an ISO instant, when reported. */
+  actualTime?: string;
 }
 
 class MavApiClient {
@@ -956,51 +966,16 @@ class MavApiClient {
         geometry = line[0].points;
       }
 
-      // Service date from the header, e.g. "(Dunaújváros - Budapest-Kelenföld, 2026.09.16.)"
+      // Service date from the header, e.g. "(Dunaújváros - Budapest-Kelenföld, 2026.09.16.)".
+      // All times in this payload are Budapest wall clock with no zone. They
+      // MUST be built via the Budapest helpers: new Date(y, m, d) + setHours()
+      // uses the server's zone, and on this UTC host every timetable time
+      // came out two hours late.
       const dateMatch = rawHtml.match(/(\d{4})\.(\d{2})\.(\d{2})\./);
-      const baseDate = dateMatch
-        ? new Date(Number(dateMatch[1]), Number(dateMatch[2]) - 1, Number(dateMatch[3]))
-        : new Date(new Date().setHours(0, 0, 0, 0));
-
-      // Rollover is driven by the SCHEDULED sequence only, which is monotonic
-      // along the route. Deriving it from scheduled and actual together made a
-      // train running one minute early look like it had gone backwards a day,
-      // producing a 1439 minute "delay".
-      let dayOffset = 0;
-      let previousScheduledAbs = -1;
-      const HALF_DAY_MS = 12 * 60 * 60 * 1000;
-
-      const parseHm = (hhmm: string | undefined): [number, number] | null => {
-        const m = hhmm?.match(/^(\d{1,2}):(\d{2})$/);
-        return m ? [Number(m[1]), Number(m[2])] : null;
-      };
-
-      const scheduledToDate = (hhmm: string | undefined): Date | undefined => {
-        const hm = parseHm(hhmm);
-        if (!hm) return undefined;
-        const minutes = hm[0] * 60 + hm[1];
-        if (previousScheduledAbs >= 0 && minutes + dayOffset * 1440 < previousScheduledAbs) dayOffset += 1;
-        previousScheduledAbs = minutes + dayOffset * 1440;
-        const d = new Date(baseDate);
-        d.setDate(d.getDate() + dayOffset);
-        d.setHours(hm[0], hm[1], 0, 0);
-        return d;
-      };
-
-      // The actual time is anchored to its own scheduled time, then nudged by a
-      // whole day only if that is the only way it can be within 12 hours of it.
-      const actualToDate = (hhmm: string | undefined, scheduled: Date | undefined): Date | undefined => {
-        const hm = parseHm(hhmm);
-        if (!hm) return undefined;
-        const anchor = scheduled ?? (() => { const d = new Date(baseDate); d.setDate(d.getDate() + dayOffset); return d; })();
-        const d = new Date(anchor);
-        d.setHours(hm[0], hm[1], 0, 0);
-        if (scheduled) {
-          if (d.getTime() - scheduled.getTime() > HALF_DAY_MS) d.setDate(d.getDate() - 1);
-          else if (scheduled.getTime() - d.getTime() > HALF_DAY_MS) d.setDate(d.getDate() + 1);
-        }
-        return d;
-      };
+      const serviceDate: CalendarDate = dateMatch
+        ? { year: Number(dateMatch[1]), month: Number(dateMatch[2]), day: Number(dateMatch[3]) }
+        : budapestToday();
+      const sequence = createRouteSequencer(serviceDate);
 
       const stripTags = (x: string) => x.replace(/<[^>]+>/g, ' ').replace(/&nbsp;|\u00a0/g, ' ').trim();
       const decode = (x: string) =>
@@ -1025,10 +1000,12 @@ class MavApiClient {
 
         const [schedArr, actArr] = splitTimes(cells[2]);
         const [schedDep, actDep] = splitTimes(cells[3]);
-        const scheduledArrival = scheduledToDate(schedArr);
-        const actualArrival = actualToDate(actArr, scheduledArrival);
-        const scheduledDeparture = scheduledToDate(schedDep);
-        const actualDeparture = actualToDate(actDep, scheduledDeparture);
+        const schedArrival = sequence.scheduled(schedArr);
+        const schedDeparture = sequence.scheduled(schedDep);
+        const scheduledArrival = schedArrival?.date;
+        const actualArrival = sequence.actual(actArr, schedArrival);
+        const scheduledDeparture = schedDeparture?.date;
+        const actualDeparture = sequence.actual(actDep, schedDeparture);
 
         const minutesBetween = (a?: Date, b?: Date) =>
           a && b ? Math.round((b.getTime() - a.getTime()) / 60000) : 0;
@@ -1053,6 +1030,145 @@ class MavApiClient {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * One station's board for one day - arrivals and departures - from vonatinfo.
+   *
+   * Looked up by station NAME. vonatinfo's own station ids are not published
+   * anywhere, and a name alone returns the identical board (verified against
+   * id+name and against the GTFS id). The GTFS station list supplies names.
+   *
+   * Row shape:
+   *   <tr onclick="...map.getData('TRAIN', { v: '8943452_260920', ... })">
+   *     <td>00:14<br><span style="color:red">00:13</span></td>  arrival   scheduled / actual
+   *     <td>04:08<br><span ...>04:09</span></td>                departure scheduled / actual (blank: terminates here)
+   *     <td style="color:blue">3</td>                             platform
+   *     <td><a ...>4238</a> személy <br>22:50 Budapest-Déli -- Pécs 06:14</td>
+   *         train number and type, then "[origin time, origin] -- [destination, destination time]"
+   *
+   * Every row carries the train's ElviraID, the same id the live positions feed
+   * uses as gtfsId, so a board row can be linked to its train.
+   */
+  async getStationBoardFromVonatinfo(
+    stationName: string,
+    date: Date = new Date()
+  ): Promise<{ departures: MavDeparture[]; arrivals: MavArrival[] }> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    let rawHtml = '';
+    try {
+      const response = await fetch(MAV_VONATINFO_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Referer': 'https://vonatinfo.mav.hu/',
+          'User-Agent': MAV_USER_AGENT,
+        },
+        body: JSON.stringify({ a: 'STATION', jo: { a: stationName, d: vonatinfoDateParam(date), language: '1' } }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`vonatinfo STATION HTTP ${response.status}`);
+      const payload = (await response.json()) as any;
+      const result = payload?.d?.result;
+      rawHtml = typeof result === 'string' ? result : result?.html || '';
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const departures: MavDeparture[] = [];
+    const arrivals: MavArrival[] = [];
+    if (!rawHtml) return { departures, arrivals };
+
+    // Board date from the title ("Dunaújváros ... 2026.09.21."). Times are
+    // Budapest wall clock; see wallClock.ts for why they are never built with
+    // new Date(y, m, d).
+    const dateMatch = rawHtml.match(/(\d{4})\.(\d{2})\.(\d{2})\./);
+    const boardDate: CalendarDate = dateMatch
+      ? { year: Number(dateMatch[1]), month: Number(dateMatch[2]), day: Number(dateMatch[3]) }
+      : budapestToday(date);
+
+    const text = (x: string) =>
+      x
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;|\u00a0/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+    const clocks = (cell: string) => text(cell).match(/\d{1,2}:\d{2}/g) || [];
+    const minutesBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / 60000);
+
+    const rowRe = /<tr\b([^>]*)>([\s\S]*?)<\/tr>/g;
+    let row: RegExpExecArray | null;
+    while ((row = rowRe.exec(rawHtml)) !== null) {
+      const cells = [...row[2].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(m => m[1]);
+      if (cells.length < 4) continue; // title and header rows use <th>
+
+      const elviraMatch = (row[1] + cells[3]).match(/v:\s*'([^']+)'/);
+      const elviraId = elviraMatch ? elviraMatch[1] : undefined;
+
+      const [trainPart, relationPart = ''] = cells[3].split(/<br\s*\/?>/i);
+      const numberMatch = trainPart.match(/<a[^>]*>([^<]+)<\/a>/);
+      const trainNumber = text(numberMatch ? numberMatch[1] : trainPart).split(' ')[0] || '';
+      const trainType = text(numberMatch ? trainPart.replace(numberMatch[0], '') : '') || 'MAV';
+      if (!trainNumber) continue;
+
+      // "[HH:MM Origin] -- [Destination HH:MM]"
+      const [left = '', right = ''] = text(relationPart).split('--').map(part => part.trim());
+      const origin = left.replace(/^\d{1,2}:\d{2}\s*/, '').trim();
+      const destination = right.replace(/\s*\d{1,2}:\d{2}$/, '').trim();
+      const platform = text(cells[2]) || undefined;
+
+      const [arrSchedTxt, arrActTxt] = clocks(cells[0]);
+      const [depSchedTxt, depActTxt] = clocks(cells[1]);
+      const arrHm = parseClock(arrSchedTxt);
+      const depHm = parseClock(depSchedTxt);
+
+      const scheduledArrival = arrHm ? atDay(boardDate, 0, arrHm) : undefined;
+      // A through train that arrives before midnight and leaves after it.
+      let depDayOffset = 0;
+      let scheduledDeparture = depHm ? atDay(boardDate, 0, depHm) : undefined;
+      if (scheduledArrival && scheduledDeparture && scheduledDeparture < scheduledArrival) {
+        depDayOffset = 1;
+        scheduledDeparture = atDay(boardDate, 1, depHm!);
+      }
+
+      if (scheduledArrival) {
+        const actHm = parseClock(arrActTxt);
+        const actual = actHm ? nearestTo(boardDate, 0, actHm, scheduledArrival) : undefined;
+        arrivals.push({
+          VonatSzam: trainNumber,
+          Erkezes: scheduledArrival.toISOString(),
+          Kiindulas: origin,
+          Vagany: platform,
+          Keses: actual ? Math.max(0, minutesBetween(scheduledArrival, actual)) : 0,
+          Tipus: trainType,
+          elviraId,
+          actualTime: actual?.toISOString(),
+        });
+      }
+      if (scheduledDeparture) {
+        const actHm = parseClock(depActTxt);
+        const actual = actHm ? nearestTo(boardDate, depDayOffset, actHm, scheduledDeparture) : undefined;
+        departures.push({
+          VonatSzam: trainNumber,
+          Indulas: scheduledDeparture.toISOString(),
+          Celallomas: destination,
+          Vagany: platform,
+          Keses: actual ? Math.max(0, minutesBetween(scheduledDeparture, actual)) : 0,
+          Tipus: trainType,
+          elviraId,
+          actualTime: actual?.toISOString(),
+        });
+      }
+    }
+
+    departures.sort((a, b) => a.Indulas.localeCompare(b.Indulas));
+    arrivals.sort((a, b) => a.Erkezes.localeCompare(b.Erkezes));
+    return { departures, arrivals };
   }
 
   async getTrainPositions(bounds?: {north: number, south: number, east: number, west: number}): Promise<MavTrain[]> {

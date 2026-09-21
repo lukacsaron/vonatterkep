@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { mavApi } from '@/lib/api/mav';
 import { redisClient } from '@/lib/redis';
 import { RouteDetails } from '@/types';
+import { attachStationData, loadGtfsIndex } from '@/lib/gtfs/stations';
+import { withTimeout } from '@/lib/trainSnapshot';
 
 const ROUTE_CACHE_TTL_SECONDS = 300; // 5 minutes
 
@@ -57,10 +59,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       try {
         const viaVonatinfo = await mavApi.getRouteDetailsFromVonatinfo(gtfsId);
         if (viaVonatinfo && viaVonatinfo.stops.length > 0) {
+          // Coordinates per stop let the map resolve which way the polyline runs.
+          const gtfsIndex = await withTimeout(loadGtfsIndex(redisClient), 'gtfs station index', 2000).catch(() => null);
           const routeDetails: RouteDetails = {
             gtfsId,
             geometry: viaVonatinfo.geometry,
-            stops: viaVonatinfo.stops,
+            stops: gtfsIndex ? attachStationData(viaVonatinfo.stops, gtfsIndex.byName).stops : viaVonatinfo.stops,
           };
           try {
             await redisClient.set(cacheKey, JSON.stringify(routeDetails), { EX: ROUTE_CACHE_TTL_SECONDS });

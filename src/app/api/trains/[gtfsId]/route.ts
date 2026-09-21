@@ -3,6 +3,8 @@ import { mavApi } from '@/lib/api/mav';
 import { transformMavTrain } from '@/lib/api/transformers';
 import { redisClient } from '@/lib/redis';
 import { Train } from '@/types';
+import { attachStationData, loadGtfsIndex } from '@/lib/gtfs/stations';
+import { withTimeout } from '@/lib/trainSnapshot';
 
 const HASH_KEY = 'trains:live';
 
@@ -41,7 +43,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           if (trainDetails) {
             console.log(`✅ Found enhanced details with ${trainDetails.stops.length} stops`);
             // Convert TrainDetails to route format that the UI expects
-            const route = trainDetails.stops.map(stop => ({
+            // Stops from vonatinfo have names but no coordinates; take them from GTFS.
+            const gtfsIndex = await withTimeout(loadGtfsIndex(redisClient), 'gtfs station index', 2000).catch(() => null);
+            const stops = gtfsIndex ? attachStationData(trainDetails.stops, gtfsIndex.byName).stops : trainDetails.stops;
+            const route = stops.map(stop => ({
               station: {
                 id: stop.id || '',
                 name: stop.name,

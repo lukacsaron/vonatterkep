@@ -61,9 +61,12 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
   };
 
   // Handle train click
+  // There is no /trains/[id] page - that route was a 404. Open the train on
+  // the map instead; the home page selects it from ?train=.
   const handleTrainClick = (departure: Departure) => {
-    if (departure.train.gtfsId) {
-      router.push(`/trains/${departure.train.gtfsId}`);
+    const trainKey = departure.train.gtfsId || departure.train.number;
+    if (trainKey) {
+      router.push(`/?train=${encodeURIComponent(trainKey)}`);
     }
   };
 
