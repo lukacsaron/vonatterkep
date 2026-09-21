@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { RefreshCw, AlertCircle } from 'lucide-react';
 import { StationSearch } from '@/app/components/Station/StationSearch';
@@ -28,8 +28,14 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
   const [activeTab, setActiveTab] = useState<'departures' | 'arrivals'>('departures');
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   
-  // Get stationId from params
-  const stationId = Array.isArray(resolvedParams.stationId) ? resolvedParams.stationId[0] : resolvedParams.stationId;
+  // Get stationId from params. useParams() hands back the raw path segment, so
+  // /stations/1%3A005510017 arrives still encoded; the API client encodes the
+  // id again, which turned it into 1%253A... and the board 404'd.
+  const rawStationId = Array.isArray(resolvedParams.stationId) ? resolvedParams.stationId[0] : resolvedParams.stationId;
+  const stationId = rawStationId ? safeDecode(rawStationId) : rawStationId;
+  const controlsId = useId();
+  const stationInputId = `${controlsId}-station`;
+  const tabsLabelId = `${controlsId}-tabs-label`;
 
   // Fetch station data to get the station name
   const { data: stations } = useStations('');
@@ -67,14 +73,11 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
     }
   };
 
-  // Handle train click
-  // There is no /trains/[id] page - that route was a 404. Open the train on
-  // the map instead; the home page selects it from ?train=.
-  const handleTrainClick = (departure: Departure) => {
+  // Train rows link to the train on the map (there is no /trains/[id] page -
+  // that route was a 404); the home page selects it from ?train=.
+  const trainHref = (departure: Departure) => {
     const trainKey = departure.train.gtfsId || departure.train.number;
-    if (trainKey) {
-      router.push(`/?train=${encodeURIComponent(trainKey)}`);
-    }
+    return trainKey ? `/?train=${encodeURIComponent(trainKey)}` : undefined;
   };
 
   // Handle manual refresh
@@ -87,13 +90,13 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
     return (
       <div className="flex flex-col min-h-screen bg-gray-50">
         <Navbar />
-        <div className="container mx-auto px-4 py-8">
+        <main className="container mx-auto px-4 py-8">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center justify-center py-12">
               <LoadingSpinner size="lg" />
             </div>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -103,7 +106,7 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
     return (
       <div className="flex flex-col min-h-screen bg-gray-50">
         <Navbar />
-        <div className="container mx-auto px-4 py-8">
+        <main className="container mx-auto px-4 py-8">
           <div className="max-w-4xl mx-auto">
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
@@ -122,7 +125,7 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
               </button>
             </div>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -130,7 +133,7 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <Navbar />
-      <div className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -142,41 +145,41 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
           </p>
         </div>
 
-        {/* Controls */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <div className="space-y-4">
-            {/* Station Search */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Állomás
-              </label>
-              <StationSearch
-                value={selectedStation}
-                onSelect={handleStationSelect}
-                placeholder="Állomás keresése..."
-                className="w-full"
-              />
-            </div>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'departures' | 'arrivals')}>
+          {/* Controls */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <div className="space-y-4">
+              {/* Station Search */}
+              <div>
+                <label htmlFor={stationInputId} className="block text-sm font-medium text-gray-700 mb-2">
+                  Állomás
+                </label>
+                <StationSearch
+                  inputId={stationInputId}
+                  value={selectedStation}
+                  onSelect={handleStationSelect}
+                  placeholder="Állomás keresése..."
+                  className="w-full"
+                />
+              </div>
 
-            {/* Date and Time Picker */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Dátum és Idő
-              </label>
-              <DatePicker
-                date={selectedDate}
-                onDateChange={setSelectedDate}
-                className="w-full"
-              />
-            </div>
+              {/* Date and Time Picker */}
+              <div>
+                <DatePicker
+                  label="Dátum és Idő"
+                  labelClassName="block text-sm font-medium text-gray-700 mb-2"
+                  date={selectedDate}
+                  onDateChange={setSelectedDate}
+                  className="w-full"
+                />
+              </div>
 
-            {/* Tabs for Departures/Arrivals */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Menetrend Típusa
-              </label>
-              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'departures' | 'arrivals')}>
-                <StyledTabsList>
+              {/* Tabs for Departures/Arrivals */}
+              <div>
+                <div id={tabsLabelId} className="block text-sm font-medium text-gray-700 mb-2">
+                  Menetrend Típusa
+                </div>
+                <StyledTabsList aria-labelledby={tabsLabelId}>
                   <StyledTabsTrigger value="departures">
                     Indulások
                   </StyledTabsTrigger>
@@ -184,72 +187,87 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
                     Érkezések
                   </StyledTabsTrigger>
                 </StyledTabsList>
-              </Tabs>
-            </div>
-          </div>
-        </div>
-
-        {/* Timetable Content */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          {/* Header with refresh button */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">
-              {selectedStation?.name ? `${selectedStation.name} - ` : ''}
-              {activeTab === 'departures' ? 'Indulások' : 'Érkezések'}
-            </h2>
-            <button
-              onClick={handleRefresh}
-              disabled={isFetching}
-              className={cn(
-                'inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
-              )}
-            >
-              <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
-              Frissítés
-            </button>
-          </div>
-
-          {/* Table Headers (Desktop only) */}
-          <div className="hidden sm:grid sm:grid-cols-12 sm:gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-700">
-            <div className="sm:col-span-2">Idő</div>
-            <div className="sm:col-span-4">
-              {activeTab === 'departures' ? 'Célállomás' : 'Indulás'}
-            </div>
-            <div className="sm:col-span-3">Vonat</div>
-            <div className="sm:col-span-1 text-center">Vágány</div>
-            <div className="sm:col-span-2 text-right">Állapot</div>
-          </div>
-
-          {/* Timetable Rows */}
-          <div className="divide-y divide-gray-100">
-            {timetableData && timetableData.length > 0 ? (
-              timetableData.map((departure, index) => (
-                <TimetableRow
-                  key={`${departure.train.id}-${departure.time}-${index}`}
-                  departure={departure}
-                  type={activeTab}
-                  onClick={handleTrainClick}
-                />
-              ))
-            ) : (
-              <div className="p-8 text-center text-gray-500">
-                <p>Nincs {activeTab === 'departures' ? 'indulás' : 'érkezés'} a kiválasztott időpontban.</p>
-                <p className="text-sm mt-2">
-                  Próbálj meg másik dátumot vagy időpontot választani.
-                </p>
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Loading overlay for refresh */}
-          {isFetching && timetableData && (
-            <div className="absolute inset-0 bg-white bg-opacity-50 flex items-center justify-center">
-              <LoadingSpinner />
-            </div>
-          )}
-        </div>
+          {/* Timetable Content: the tab panel the Indulások / Érkezések tabs control */}
+          {(['departures', 'arrivals'] as const).map((tab) => (
+            <StyledTabsContent
+              key={tab}
+              value={tab}
+              // Both panels stay in the DOM so each tab's aria-controls resolves;
+              // only the active one is shown and filled.
+              forceMount
+              hidden={activeTab !== tab}
+              className="mt-0"
+            >
+              {activeTab === tab && (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                  {/* Header with refresh button */}
+                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      {selectedStation?.name ? `${selectedStation.name} - ` : ''}
+                      {activeTab === 'departures' ? 'Indulások' : 'Érkezések'}
+                    </h2>
+                    <button
+                      onClick={handleRefresh}
+                      disabled={isFetching}
+                      className={cn(
+                        'inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                        'text-gray-600 hover:text-gray-900 hover:bg-gray-100',
+                        'disabled:opacity-50 disabled:cursor-not-allowed'
+                      )}
+                    >
+                      <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
+                      Frissítés
+                    </button>
+                  </div>
+
+                  {/* Table Headers (Desktop only) */}
+                  <div className="hidden sm:grid sm:grid-cols-12 sm:gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-700" aria-hidden="true">
+                    <div className="sm:col-span-2">Idő</div>
+                    <div className="sm:col-span-4">
+                      {activeTab === 'departures' ? 'Célállomás' : 'Indulás'}
+                    </div>
+                    <div className="sm:col-span-3">Vonat</div>
+                    <div className="sm:col-span-1 text-center">Vágány</div>
+                    <div className="sm:col-span-2 text-right">Állapot</div>
+                  </div>
+
+                  {/* Timetable Rows */}
+                  <div className="divide-y divide-gray-100">
+                    {timetableData && timetableData.length > 0 ? (
+                      timetableData.map((departure, index) => (
+                        <TimetableRow
+                          key={`${departure.train.id}-${departure.time}-${index}`}
+                          departure={departure}
+                          type={activeTab}
+                          href={trainHref(departure)}
+                        />
+                      ))
+                    ) : (
+                      <div className="p-8 text-center text-gray-500">
+                        <p>Nincs {activeTab === 'departures' ? 'indulás' : 'érkezés'} a kiválasztott időpontban.</p>
+                        <p className="text-sm mt-2">
+                          Próbálj meg másik dátumot vagy időpontot választani.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Loading overlay for refresh */}
+                  {isFetching && timetableData && (
+                    <div className="absolute inset-0 bg-white bg-opacity-50 flex items-center justify-center">
+                      <LoadingSpinner />
+                    </div>
+                  )}
+                </div>
+              )}
+            </StyledTabsContent>
+          ))}
+
+        </Tabs>
 
         {/* Auto-refresh indicator */}
         {timetableData && timetableData.length > 0 && (
@@ -258,7 +276,15 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
           </div>
         )}
         </div>
-      </div>
+      </main>
     </div>
   );
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }

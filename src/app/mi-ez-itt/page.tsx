@@ -10,9 +10,11 @@ import {
   Eye, 
   Navigation,
   Shield,
-  Users
+  Users,
+  Cookie
 } from 'lucide-react';
 import { Navbar } from '@/app/components/UI/Navbar';
+import { ConsentSettings, CookieSettingsButton } from '@/app/components/Consent/ConsentSettings';
 
 export const metadata: Metadata = {
   title: 'Mi ez itt? - VasútTérkép | Magyar vonatkövetés élőben',
@@ -114,6 +116,7 @@ export default function MiEzIttPage() {
             </div>
 
             {/* Main Features Grid */}
+            <h2 className="sr-only">Funkciók</h2>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
               <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                 <div className="flex items-center mb-4">
@@ -291,14 +294,94 @@ export default function MiEzIttPage() {
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900 mb-4">Adatvédelem</h3>
                   <ul className="space-y-2 text-gray-700">
-                    <li>• Nem tárolunk személyes adatokat</li>
-                    <li>• Csak a szükséges cookie-kat használjuk</li>
+                    <li>• Nincs regisztráció, nem kérünk tőled személyes adatot</li>
+                    <li>
+                      • Látogatottsági statisztikához Google Analytics-et használunk, de csak
+                      ha hozzájárulsz (<a href="#adatvedelem" className="text-blue-600 underline hover:text-blue-800">részletek lent</a>)
+                    </li>
                     <li>• Tiszteletben tartjuk a MÁV rendszereit</li>
                     <li>• Rate limiting: max. 1 kérés/perc</li>
                   </ul>
                 </div>
               </div>
             </div>
+
+            {/* Cookies and analytics */}
+            <section
+              id="adatvedelem"
+              aria-labelledby="adatvedelem-cim"
+              className="bg-white rounded-xl p-8 shadow-sm border border-gray-100 mb-12 scroll-mt-20"
+            >
+              <div className="flex items-center mb-6">
+                <Cookie className="h-8 w-8 text-gray-600 mr-3" />
+                <h2 id="adatvedelem-cim" className="text-3xl font-semibold text-gray-900">Sütik és statisztika</h2>
+              </div>
+              <div className="space-y-6 text-gray-700 leading-relaxed">
+                <p>
+                  Az oldal alapból semmit nem tölt be a Google-től. Ha a sütisávon az{' '}
+                  <strong>„Elfogadom”</strong> gombra kattintasz, akkor, és csak akkor, betöltjük a{' '}
+                  <strong>Google Tag Managert</strong>, ami elindítja a <strong>Google Analytics</strong>-et.
+                  Ha elutasítod, vagy még nem döntöttél, nem fut Google-kód az oldalon.
+                </p>
+
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-3">Mire használjuk?</h3>
+                  <p>
+                    Arra, hogy lássuk, hányan használjátok az oldalt, melyik oldalakat nézitek, milyen
+                    eszközről és honnan érkeztek. Ebből csak összesített statisztikát nézünk, hogy tudjuk, mit
+                    érdemes fejleszteni. Hirdetésre nem használjuk: a hirdetési célú tárolást és jelzéseket
+                    a Google felé kifejezetten letiltjuk.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-3">Mi történik, ha elfogadod?</h3>
+                  <ul className="space-y-2">
+                    <li>
+                      • A Google Analytics sütiket tesz a böngésződbe (<code className="text-sm">_ga</code>,{' '}
+                      <code className="text-sm">_ga_…</code>), hogy felismerje a visszatérő látogatót.
+                    </li>
+                    <li>
+                      • A Google megkapja, milyen oldalakat töltesz be, a böngésződ és az eszközöd adatait,
+                      valamint az IP-címedet. Ezeket a Google a saját{' '}
+                      <a
+                        href="https://policies.google.com/privacy?hl=hu"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline hover:text-blue-800"
+                      >
+                        adatvédelmi irányelvei<span className="sr-only"> (új lapon nyílik)</span>
+                      </a>{' '}
+                      szerint kezeli.
+                    </li>
+                    <li>
+                      • A döntésedet a böngésződ helyi tárhelyén (localStorage) jegyezzük meg, hogy ne kérdezzünk
+                      meg minden alkalommal. Ez nem süti, és nem küldjük el sehova.
+                    </li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-3">Hogyan vonhatod vissza?</h3>
+                  <p className="mb-4">
+                    Bármikor, itt lent, vagy az oldal alján a „Cookie-beállítások” gombbal. Visszavonáskor
+                    töröljük a Google Analytics sütijeit, és újratöltjük az oldalt, hogy a Google kódja ne fusson
+                    tovább. A Google-nek korábban már elküldött adatokat ez nem törli.
+                  </p>
+                  <ConsentSettings />
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-3">Más külső szolgáltatások</h3>
+                  <p>
+                    A térképet a <strong>Mapbox</strong>, a vasútvonalakat az <strong>OpenRailwayMap</strong>{' '}
+                    szolgálja ki. A térkép betöltésekor a böngésződ közvetlenül tőlük kéri le a térképcsempéket,
+                    így ők is látják az IP-címedet. A Mapbox a térkép használatáról működési adatot is kap, és
+                    ehhez egy véletlenszerű azonosítót tárol a böngésződ helyi tárhelyén.
+                  </p>
+                </div>
+              </div>
+            </section>
 
             {/* Call to Action */}
             <div className="text-center">
@@ -331,6 +414,9 @@ export default function MiEzIttPage() {
                 <Link href="/ki-vagyok" className="text-blue-600 hover:text-blue-800 ml-1 underline">
                   Ki vagyok én?
                 </Link>
+              </p>
+              <p className="mt-3 text-sm">
+                <CookieSettingsButton />
               </p>
             </div>
           </div>

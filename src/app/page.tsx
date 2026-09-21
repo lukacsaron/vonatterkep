@@ -32,6 +32,7 @@ function HomeContent() {
     <div className="flex flex-col h-screen bg-white">
       <Navbar />
       <main className="flex-1 relative bg-gray-50">
+        <h1 className="sr-only">VasútTérkép – élő vonatkövetés Magyarországon</h1>
         <StaleDataBanner freshness={freshness} />
         <MapSelector />
       </main>
@@ -45,6 +46,7 @@ export default function Home() {
       <div className="flex flex-col h-screen bg-white">
         <Navbar />
         <main className="flex-1 relative bg-gray-50 flex items-center justify-center">
+          <h1 className="sr-only">VasútTérkép – élő vonatkövetés Magyarországon</h1>
           <LoadingSpinner size="lg" />
         </main>
       </div>

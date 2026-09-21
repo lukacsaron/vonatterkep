@@ -3,6 +3,13 @@
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import { cn } from '@/lib/utils';
 
+// Radix Tabs implements the ARIA tabs pattern: role=tablist/tab/tabpanel,
+// aria-selected, aria-controls <-> aria-labelledby between each tab and its
+// panel, and a roving tabindex with arrow-key / Home / End navigation.
+// For those references to resolve, render a (Styled)TabsContent for every tab
+// (forceMount + hidden keeps the inactive panel in the DOM), and name the
+// TabsList with aria-label or aria-labelledby.
+
 const Tabs = TabsPrimitive.Root;
 
 const TabsList = TabsPrimitive.List;
@@ -17,7 +24,7 @@ export { Tabs, TabsList, TabsTrigger, TabsContent };
 export const StyledTabsList = ({ className, ...props }: React.ComponentProps<typeof TabsList>) => (
   <TabsList
     className={cn(
-      'inline-flex h-10 items-center justify-center rounded-md bg-gray-100 p-1 text-gray-500 w-full',
+      'inline-flex h-10 items-center justify-center rounded-md bg-gray-100 p-1 text-gray-600 w-full',
       className
     )}
     {...props}

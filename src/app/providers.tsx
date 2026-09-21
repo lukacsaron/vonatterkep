@@ -4,6 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/api/client';
 import { ReactNode, useState, useEffect } from 'react';
 import { GlobalSearchProvider } from '@/app/components/Search/GlobalSearchProvider';
+import { ConsentProvider } from '@/app/components/Consent/ConsentProvider';
 
 // Dynamic DevTools component
 function DevTools() {
@@ -28,10 +29,12 @@ function DevTools() {
 export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <GlobalSearchProvider>
-        {children}
-        <DevTools />
-      </GlobalSearchProvider>
+      <ConsentProvider>
+        <GlobalSearchProvider>
+          {children}
+          <DevTools />
+        </GlobalSearchProvider>
+      </ConsentProvider>
     </QueryClientProvider>
   );
 }
