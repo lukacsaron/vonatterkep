@@ -877,8 +877,9 @@ function TrainMapComponent({ accessToken }: TrainMapProps) {
       />
 
 
-      {/* Delay Legend */}
-      <div className="absolute bottom-4 left-4 z-10">
+      {/* Delay legend, lifted above the Mapbox wordmark: their attribution
+          terms require the logo to stay visible, and bottom-4 covered it. */}
+      <div className="absolute bottom-10 left-4 z-10 max-w-[calc(100%-2rem)]">
         <DelayLegend />
       </div>
 
