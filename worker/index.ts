@@ -333,9 +333,10 @@ setTimeout(() => {
 }, 2000);
 
 // --- GTFS station list -------------------------------------------------------
-// MÁV regenerates its GTFS feed nightly. Check hourly, download only when the
-// stored copy is older than ~20h: one download a day, and a failed run retries
-// within the hour instead of waiting a whole day.
+// MÁV regenerates its GTFS feed nightly. Check hourly with a conditional request:
+// an unchanged file costs a bodyless 304, a new one is picked up within the hour
+// of being published, and a failed check simply retries next hour. If the server
+// stops honouring conditional requests this falls back to one download a day.
 const GTFS_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let gtfsCredentialsWarned = false;
 
@@ -350,11 +351,17 @@ async function refreshGtfsIfDue(): Promise<void> {
   try {
     if (!(await isGtfsRefreshDue(redisClient))) return;
     const started = Date.now();
-    const meta = await refreshGtfsStations(redisClient);
-    console.log(
-      `\u{1F5C2}\uFE0F GTFS stations refreshed: ${meta.stationCount} stations, feed ${meta.feedVersion ?? 'unknown'}, ` +
-      `${Date.now() - started} ms`
-    );
+    const outcome = await refreshGtfsStations(redisClient);
+    if (outcome.result === 'updated') {
+      console.log(
+        `\u{1F5C2}\uFE0F GTFS stations updated: ${outcome.meta.stationCount} stations, ` +
+        `feed ${outcome.meta.feedVersion ?? 'unknown'}, ${Date.now() - started} ms`
+      );
+    } else if (outcome.reason === 'server-ignored-conditional') {
+      console.warn('GTFS server ignored the conditional request - falling back to one full download per day.');
+    } else {
+      console.log(`GTFS unchanged since ${outcome.meta.lastModified} (HTTP 304).`);
+    }
   } catch (error) {
     // The previous list stays in Redis (long TTL), so a failure degrades nothing.
     console.error('GTFS station refresh failed - keeping the previous station list:', error);

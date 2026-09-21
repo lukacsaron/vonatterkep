@@ -32,15 +32,28 @@ const MIN_PLAUSIBLE_STATIONS = 100;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 export interface GtfsMeta {
+  /** When the stored station list was downloaded. */
   fetchedAt: string;
+  /** When MÁV's server was last asked whether a newer file exists. */
+  checkedAt?: string;
   feedVersion?: string;
   stationCount: number;
+  /** Validators from the last download, sent back as a conditional request. */
+  lastModified?: string;
+  etag?: string;
+  /** Set if the server answered a conditional request with a full 200 anyway. */
+  conditionalUnsupported?: boolean;
 }
+
+export type GtfsRefreshResult =
+  | { result: 'updated'; meta: GtfsMeta }
+  | { result: 'unchanged'; meta: GtfsMeta; reason: 'not-modified' | 'server-ignored-conditional' };
 
 /** The subset of the redis client this module needs, so it can be tested without Redis. */
 export interface GtfsRedis {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, options?: { EX?: number }): Promise<unknown>;
+  expire(key: string, seconds: number): Promise<unknown>;
 }
 
 export function buildStationsFromStops(stopsCsv: string): Station[] {
@@ -64,7 +77,16 @@ export function buildStationsFromStops(stopsCsv: string): Station[] {
   return stations;
 }
 
-export async function downloadGtfsArchive(): Promise<Buffer> {
+type GtfsDownload =
+  | { status: 'not-modified' }
+  | { status: 'ok'; archive: Buffer; lastModified?: string; etag?: string };
+
+/**
+ * Download the feed. With validators from the previous download this is a
+ * conditional request: MÁV's server answers 304 with an empty body when the
+ * file has not changed (verified), so checking costs almost nothing.
+ */
+export async function downloadGtfsArchive(validators: { lastModified?: string; etag?: string } = {}): Promise<GtfsDownload> {
   const url = process.env.MAV_GTFS_URL || DEFAULT_GTFS_URL;
   const user = process.env.MAV_GTFS_USER;
   const password = process.env.MAV_GTFS_PASSWORD;
@@ -72,24 +94,82 @@ export async function downloadGtfsArchive(): Promise<Buffer> {
     throw new Error('MAV_GTFS_USER / MAV_GTFS_PASSWORD are not set');
   }
 
+  const headers: Record<string, string> = {
+    Authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`,
+  };
+  if (validators.lastModified) headers['If-Modified-Since'] = validators.lastModified;
+  if (validators.etag) headers['If-None-Match'] = validators.etag;
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
   try {
-    const response = await fetch(url, {
-      headers: { Authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}` },
-      signal: controller.signal,
-    });
+    const response = await fetch(url, { headers, signal: controller.signal });
+    if (response.status === 304) return { status: 'not-modified' };
     if (!response.ok) throw new Error(`GTFS download failed: HTTP ${response.status}`);
-    return Buffer.from(await response.arrayBuffer());
+    return {
+      status: 'ok',
+      archive: Buffer.from(await response.arrayBuffer()),
+      lastModified: response.headers.get('last-modified') ?? undefined,
+      etag: response.headers.get('etag') ?? undefined,
+    };
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** Download the feed, extract stops.txt and store the station list. */
-export async function refreshGtfsStations(redis: GtfsRedis): Promise<GtfsMeta> {
-  const archive = await downloadGtfsArchive();
-  const stations = buildStationsFromStops(extractZipEntry(archive, 'stops.txt').toString('utf8'));
+async function readMeta(redis: GtfsRedis): Promise<GtfsMeta | null> {
+  try {
+    const raw = await redis.get(GTFS_META_KEY);
+    return raw ? (JSON.parse(raw) as GtfsMeta) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Nothing new upstream: record the check and extend the stored list's TTL.
+ * The TTL is otherwise only renewed on a download, so without this a long run
+ * of 304s would let a perfectly current station list expire.
+ */
+async function markChecked(redis: GtfsRedis, meta: GtfsMeta): Promise<GtfsMeta> {
+  const updated: GtfsMeta = { ...meta, checkedAt: new Date().toISOString() };
+  await redis.expire(GTFS_STATIONS_KEY, GTFS_STATIONS_TTL_SECONDS);
+  await redis.set(GTFS_META_KEY, JSON.stringify(updated), { EX: GTFS_STATIONS_TTL_SECONDS });
+  return updated;
+}
+
+/** Ask for a newer feed; if there is one, extract stops.txt and store the station list. */
+export async function refreshGtfsStations(redis: GtfsRedis): Promise<GtfsRefreshResult> {
+  const previous = await readMeta(redis);
+  const useConditional = previous && !previous.conditionalUnsupported;
+  const download = await downloadGtfsArchive(
+    useConditional ? { lastModified: previous.lastModified, etag: previous.etag } : {}
+  );
+
+  if (download.status === 'not-modified' && previous) {
+    return { result: 'unchanged', reason: 'not-modified', meta: await markChecked(redis, previous) };
+  }
+  if (download.status === 'not-modified') {
+    // A 304 without stored validators should be impossible; do not trust it.
+    throw new Error('GTFS server answered 304 to an unconditional request');
+  }
+
+  // A full response carrying the same Last-Modified we already have means the
+  // server ignored the conditional request. Do not reparse; and stop relying on
+  // conditional requests, or every hourly check would be a 5.6 MB download.
+  if (
+    useConditional &&
+    previous.lastModified &&
+    download.lastModified === previous.lastModified
+  ) {
+    return {
+      result: 'unchanged',
+      reason: 'server-ignored-conditional',
+      meta: await markChecked(redis, { ...previous, conditionalUnsupported: true }),
+    };
+  }
+
+  const stations = buildStationsFromStops(extractZipEntry(download.archive, 'stops.txt').toString('utf8'));
   if (stations.length < MIN_PLAUSIBLE_STATIONS) {
     throw new Error(
       `GTFS stops.txt yielded only ${stations.length} stations - refusing to replace the station list`
@@ -98,27 +178,48 @@ export async function refreshGtfsStations(redis: GtfsRedis): Promise<GtfsMeta> {
 
   let feedVersion: string | undefined;
   try {
-    feedVersion = parseCsv(extractZipEntry(archive, 'feed_info.txt').toString('utf8'))[0]?.feed_version;
+    feedVersion = parseCsv(extractZipEntry(download.archive, 'feed_info.txt').toString('utf8'))[0]?.feed_version;
   } catch {
     // feed_info.txt is optional in GTFS.
   }
 
-  const meta: GtfsMeta = { fetchedAt: new Date().toISOString(), feedVersion, stationCount: stations.length };
+  const now = new Date().toISOString();
+  const meta: GtfsMeta = {
+    fetchedAt: now,
+    checkedAt: now,
+    feedVersion,
+    stationCount: stations.length,
+    lastModified: download.lastModified,
+    etag: download.etag,
+    // No validators in the response means conditional requests cannot work;
+    // without this flag every hourly check would become a full download.
+    conditionalUnsupported:
+      (previous?.conditionalUnsupported ?? false) || (!download.lastModified && !download.etag),
+  };
   await redis.set(GTFS_STATIONS_KEY, JSON.stringify(stations), { EX: GTFS_STATIONS_TTL_SECONDS });
   await redis.set(GTFS_META_KEY, JSON.stringify(meta), { EX: GTFS_STATIONS_TTL_SECONDS });
   memo = null;
-  return meta;
+  return { result: 'updated', meta };
 }
 
+/**
+ * Whether to contact MÁV on this check. With a working conditional request a
+ * check is nearly free, so every scheduled check goes out and a new file is
+ * picked up within one check interval of being published. Without one (no
+ * validators stored, or the server ignored them) fall back to one full
+ * download per ~20h.
+ */
 export async function isGtfsRefreshDue(redis: GtfsRedis, now: number = Date.now()): Promise<boolean> {
-  try {
-    const raw = await redis.get(GTFS_META_KEY);
-    if (!raw) return true;
-    const fetchedAt = Date.parse((JSON.parse(raw) as GtfsMeta).fetchedAt);
-    return !Number.isFinite(fetchedAt) || now - fetchedAt > GTFS_REFRESH_AFTER_MS;
-  } catch {
+  const meta = await readMeta(redis);
+  if (!meta) return true;
+  if ((meta.lastModified || meta.etag) && !meta.conditionalUnsupported) return true;
+  if (!meta.lastModified && !meta.etag && !meta.conditionalUnsupported) {
+    // Stored by the version before conditional requests: one download to learn
+    // the validators, after which checks become conditional.
     return true;
   }
+  const fetchedAt = Date.parse(meta.fetchedAt);
+  return !Number.isFinite(fetchedAt) || now - fetchedAt > GTFS_REFRESH_AFTER_MS;
 }
 
 // ---------------------------------------------------------------------------
