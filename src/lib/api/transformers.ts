@@ -1,5 +1,6 @@
-import { Train, Station, Departure, TrainType, DepartureStatus, TrainSearchResult, TrainDetails, TrainStop } from '../../types';
+import { Train, Station, Departure, DepartureStatus } from '../../types';
 import { MavStation, MavTrain, MavDeparture, MavArrival } from './mav';
+import { applyTrainIdentity, feedIdentity, parseBoardLabel, trainTypeForCategory } from '../trains/identity';
 
 // Speed conversion utilities
 function msToKmh(speedMs: number): number {
@@ -27,35 +28,23 @@ export function transformMavStation(mavStation: MavStation): Station {
   };
 }
 
-export function transformMavTrain(mavTrain: MavTrain, trainDetails?: TrainDetails): Train {
-  // Origin and destination come from the trip's stop list when we have it. The
-  // OTP stops carry real ids and coordinates, so use them - the previous version
-  // hardcoded a placeholder id and 0,0 coordinates for every single train.
-  let origin: Station | undefined;
-  let destination: Station | undefined;
-
-  const stops = trainDetails?.stops;
-
-  if (stops && stops.length > 0) {
-    origin = stationFromStop(stops[0]);
-    destination = stationFromStop(stops[stops.length - 1]);
-  } else {
-    // Only names are available (vonatinfo's @Relation): keep them, but do not
-    // invent an id or a position. The worker fills both in from GTFS.
-    if (mavTrain.Celallomas && mavTrain.Celallomas !== 'Unknown') {
-      destination = { id: '', name: mavTrain.Celallomas };
-    }
-    if (mavTrain.Kiindulas) {
-      origin = { id: '', name: mavTrain.Kiindulas };
-    }
-  }
-
+/**
+ * One positions-feed train -> our Train. Origin and destination carry names
+ * only (vonatinfo's @Relation); the worker gives them GTFS ids and coordinates.
+ * Number, operator and - for HÉV - category and line are known from the feed
+ * itself; everything else about the train's identity is applied later from
+ * the TRAIN title (see src/lib/trains/identityEnrichment.ts).
+ */
+export function transformMavTrain(mavTrain: MavTrain): Train {
+  const destination: Station | undefined = mavTrain.Celallomas ? { id: '', name: mavTrain.Celallomas } : undefined;
+  const origin: Station | undefined = mavTrain.Kiindulas ? { id: '', name: mavTrain.Kiindulas } : undefined;
   const gps = mavTrain.UtolsoGPS;
 
   const train: Train = {
     id: mavTrain.VonatSzam,
-    number: mavTrain.VonatSzam,
-    type: mapMavTrainType(mavTrain.Tipus),
+    number: mavTrain.publicNumber || mavTrain.VonatSzam,
+    operator: mavTrain.operator,
+    type: trainTypeForCategory(undefined, undefined, mavTrain.operator),
     position: gps && (gps.Lat !== 0 || gps.Lng !== 0)
       ? { latitude: gps.Lat, longitude: gps.Lng }
       : undefined,
@@ -64,33 +53,19 @@ export function transformMavTrain(mavTrain: MavTrain, trainDetails?: TrainDetail
     delay: mavTrain.Keses || 0,
     origin,
     destination,
-    // Enhanced fields
     gtfsId: mavTrain.gtfsId,
-    trainName: mavTrain.trainName || trainDetails?.trainName,
     lastUpdate: gps?.Ido ? new Date(gps.Ido) : new Date(),
     isMoving: (gps?.Sebesseg || 0) > kmhToMs(5), // Consider moving if speed > 5 km/h (converted to m/s)
-    // UIC locomotive type detection
-    locomotiveType: mavTrain.locomotiveType,
-    uicInfo: mavTrain.uicInfo
   };
 
-  return train;
+  const known = feedIdentity(train);
+  return known ? applyTrainIdentity(train, known) : train;
 }
 
-/** Build a Station from a trip stop, keeping coordinates only when they are real. */
-function stationFromStop(stop: TrainStop): Station {
-  const coords = stop.coordinates;
-  const hasRealCoords = !!coords
-    && typeof coords.latitude === 'number'
-    && typeof coords.longitude === 'number'
-    && !(coords.latitude === 0 && coords.longitude === 0);
-
-  return {
-    id: stop.id || '',
-    name: stop.name,
-    coordinates: hasRealCoords ? coords : undefined,
-    platforms: stop.platform ? [stop.platform] : undefined
-  };
+/** Board label ("TOKAJ IC", "személy", "CÍVIS") -> type, name and category of the train. */
+function boardTrainIdentity(label: string): Pick<Train, 'type' | 'trainName' | 'category'> {
+  const { name, category } = parseBoardLabel(label);
+  return { type: trainTypeForCategory(category), trainName: name, category };
 }
 
 export function transformMavDeparture(mavDeparture: MavDeparture, station: Station): Departure {
@@ -102,7 +77,7 @@ export function transformMavDeparture(mavDeparture: MavDeparture, station: Stati
       // Same ElviraID the live positions feed uses as gtfsId, so the station
       // page can open this train on the map.
       gtfsId: mavDeparture.elviraId,
-      type: mapMavTrainType(mavDeparture.Tipus),
+      ...boardTrainIdentity(mavDeparture.Tipus),
       position: station.coordinates,
       speed: 0,
       heading: 0,
@@ -134,7 +109,7 @@ export function transformMavArrival(mavArrival: MavArrival, station: Station): D
       // Same ElviraID the live positions feed uses as gtfsId, so the station
       // page can open this train on the map.
       gtfsId: mavArrival.elviraId,
-      type: mapMavTrainType(mavArrival.Tipus),
+      ...boardTrainIdentity(mavArrival.Tipus),
       position: station.coordinates,
       speed: 0,
       heading: 0,
@@ -151,71 +126,6 @@ export function transformMavArrival(mavArrival: MavArrival, station: Station): D
     // Legacy fields for backward compatibility
     arrival: arrivalTime
   };
-}
-
-export function transformSearchResult(
-  searchResult: { train: MavDeparture; fromStation: string; details?: any },
-  stationMap?: Map<string, Station>
-): TrainSearchResult {
-  const departure = searchResult.train;
-  const details = searchResult.details;
-  
-  // Calculate duration if we have route details
-  let durationMinutes = 0;
-  let originTime = new Date();
-  let destinationTime = new Date();
-  
-  if (details && details.stops && details.stops.length > 0) {
-    const firstStop = details.stops[0];
-    const lastStop = details.stops[details.stops.length - 1];
-    
-    originTime = firstStop.scheduledDeparture || firstStop.scheduledArrival || new Date();
-    destinationTime = lastStop.scheduledArrival || lastStop.scheduledDeparture || new Date();
-    
-    durationMinutes = Math.round((destinationTime.getTime() - originTime.getTime()) / (1000 * 60));
-  } else {
-    // Fallback: use the departure time from the search result
-    originTime = parseTimeString(departure.Indulas);
-    destinationTime = new Date(originTime.getTime() + 2 * 60 * 60 * 1000); // Assume 2 hours
-    durationMinutes = 120;
-  }
-  
-  return {
-    gtfsId: details?.gtfsId || `${departure.VonatSzam}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}_1`,
-    trainNumber: departure.VonatSzam,
-    trainName: details?.trainName,
-    trainType: mapMavTrainType(departure.Tipus),
-    origin: {
-      name: searchResult.fromStation === 'search' 
-        ? (details?.stops?.[0]?.name || 'Unknown')
-        : (stationMap?.get(searchResult.fromStation)?.name || searchResult.fromStation),
-      time: originTime
-    },
-    destination: {
-      name: departure.Celallomas,
-      time: destinationTime
-    },
-    durationMinutes,
-    liveDelayMinutes: departure.Keses > 0 ? departure.Keses : undefined,
-    isActive: details ? true : false // If we have details, the train is active
-  };
-}
-
-function mapMavTrainType(mavType: string): TrainType {
-  switch (mavType.toUpperCase()) {
-    case 'IC':
-      return TrainType.IC;
-    case 'EC':
-      return TrainType.EC;
-    case 'RJ':
-      return TrainType.RAILJET;
-    case 'S':
-      return TrainType.SUBURBAN;
-    case 'EN':
-      return TrainType.NIGHT;
-    default:
-      return TrainType.REGIONAL;
-  }
 }
 
 function parseTimeString(timeStr: string): Date {

@@ -1,39 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { redisClient } from '@/lib/redis';
-import { mavApi, MavStation, OtpRateLimitedError } from '@/lib/api/mav';
+import { MavStation } from '@/lib/api/mav';
 import { transformMavStation } from '@/lib/api/transformers';
 import { Station } from '@/types';
 import { loadGtfsStations } from '@/lib/gtfs/stations';
 import { withTimeout } from '@/lib/trainSnapshot';
 
-const CACHE_KEY = 'cache:stations:all';
+/**
+ * Station list written by earlier versions of the site (fetched from MÁV's OTP
+ * backend, which now IP-blocks this server, and cached for 7 days). Still real
+ * data, so it is read while it lasts; nothing writes it any more.
+ */
+const LEGACY_CACHE_KEY = 'cache:stations:all';
 
-// Station geometry changes a handful of times a year, and mavplusz.hu rate limits
-// per host - so cache hard. A cache hit costs zero upstream requests; a cold cache
-// costs exactly one bulk GraphQL query for the whole network.
-const CACHE_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
-
-// The hardcoded fallback is cached far more briefly so we pick up the real list
-// soon after the upstream recovers - but not so briefly that we retry on every
-// request while we are being rate limited.
-const FALLBACK_CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
-
-// Second line of defence: if Redis is unavailable, this keeps a Redis outage from
-// turning into one upstream request per page view.
+// Keeps a Redis outage or a missing GTFS list from costing a Redis round trip
+// and a loud log line on every page view.
 const MEMORY_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+// The fallback is remembered briefly, so the real list is picked up soon after
+// the worker has loaded GTFS.
+const FALLBACK_MEMORY_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 // A search for "a" matches most of the network; there is no point shipping - or
 // rendering - thousands of rows into a dropdown.
 const MAX_SEARCH_RESULTS = 100;
 
-let memoryCache: { stations: Station[]; expiresAt: number } | null = null;
+type StationSource = 'gtfs' | 'cache' | 'fallback';
 
-// Coalesces concurrent cache misses so a cold start cannot fan out into one
-// upstream request per visitor.
-let inFlightFetch: Promise<Station[]> | null = null;
+let memoryCache: { stations: Station[]; source: StationSource; expiresAt: number } | null = null;
 
-// Known-good positions for the busiest stations, taken from the same OTP feed.
-// Used only when the upstream is unreachable, so the map is not empty.
+// Known-good positions for the busiest stations. Used only when neither the GTFS
+// list nor a cached list is available, so the map is not empty.
 const FALLBACK_STATIONS: MavStation[] = [
   { UicKod: '1:005510017', Nev: 'Budapest-Keleti', GPS: { Lat: 47.500278, Lng: 19.084167 } },
   { UicKod: '1:005510033', Nev: 'Budapest-Nyugati', GPS: { Lat: 47.510833, Lng: 19.0575 } },
@@ -72,53 +68,20 @@ const FALLBACK_STATIONS: MavStation[] = [
   { UicKod: '1:005506189', Nev: 'Dombóvár', GPS: { Lat: 46.37, Lng: 18.149722 } },
 ];
 
-async function readCache(): Promise<Station[] | null> {
-  if (memoryCache && memoryCache.expiresAt > Date.now()) {
-    return memoryCache.stations;
-  }
-
+async function readLegacyCache(): Promise<Station[] | null> {
   try {
-    const cached = await redisClient.get(CACHE_KEY);
+    const cached = await withTimeout(
+      redisClient.get(LEGACY_CACHE_KEY) as Promise<string | null>,
+      'legacy station cache',
+      2000
+    );
     if (!cached) return null;
     const stations = JSON.parse(cached) as Station[];
-    if (!Array.isArray(stations) || stations.length === 0) return null;
-    memoryCache = { stations, expiresAt: Date.now() + MEMORY_CACHE_TTL_MS };
-    return stations;
+    return Array.isArray(stations) && stations.length > 0 ? stations : null;
   } catch (error) {
-    console.error('Failed to read station cache from Redis:', error);
+    console.error('Failed to read the legacy station cache from Redis:', error);
     return null;
   }
-}
-
-function writeCache(stations: Station[], ttlSeconds: number): void {
-  memoryCache = { stations, expiresAt: Date.now() + MEMORY_CACHE_TTL_MS };
-  redisClient
-    .set(CACHE_KEY, JSON.stringify(stations), { EX: ttlSeconds })
-    .catch((err: Error) => console.error('Failed to cache stations in Redis:', err));
-}
-
-/** One upstream bulk query, shared by every concurrent caller. */
-async function fetchStations(): Promise<Station[]> {
-  if (inFlightFetch) return inFlightFetch;
-
-  inFlightFetch = (async () => {
-    try {
-      const mavStations = await mavApi.getStations();
-      const stations = mavStations.map(transformMavStation).filter(station => station.coordinates);
-
-      if (stations.length === 0) {
-        throw new Error('OTP returned stations but none had usable coordinates');
-      }
-
-      writeCache(stations, CACHE_TTL_SECONDS);
-      console.log(`✅ Fetched and cached ${stations.length} stations from the MAV OTP API`);
-      return stations;
-    } finally {
-      inFlightFetch = null;
-    }
-  })();
-
-  return inFlightFetch;
 }
 
 export async function GET(request: NextRequest) {
@@ -126,43 +89,38 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search');
 
   // MÁV's GTFS feed is the primary station source: every stop with coordinates,
-  // refreshed daily by the worker, no upstream call per request. The OTP path
-  // and the hardcoded list below remain as fallbacks for a cold start.
+  // refreshed by the worker, no upstream call per request. Then whatever an
+  // earlier version cached, then the hardcoded list below.
   let stations: Station[] | null = await withTimeout(loadGtfsStations(redisClient), 'gtfs stations', 2000).catch(() => null);
-  let source: 'gtfs' | 'cache' | 'upstream' | 'fallback' = 'gtfs';
+  let source: StationSource = 'gtfs';
   let cacheHit = stations !== null;
 
-  if (!stations) {
-    stations = await readCache();
-    cacheHit = stations !== null;
-    source = 'cache';
+  if (!stations && memoryCache && memoryCache.expiresAt > Date.now()) {
+    stations = memoryCache.stations;
+    source = memoryCache.source;
+    cacheHit = true;
   }
 
   if (!stations) {
-    try {
-      stations = await fetchStations();
-      source = 'upstream';
-    } catch (error) {
-      // LOUD. A silent fallback to 35 hardcoded stations is how this went
-      // unnoticed for months.
-      if (error instanceof OtpRateLimitedError) {
-        console.error(
-          '🚫 Station fetch skipped: MAV OTP API is rate limiting this host. ' +
-          'Serving the hardcoded fallback station list.'
-        );
-      } else {
-        console.error(
-          '🚨 STATION FETCH FAILED - serving the hardcoded fallback station list. ' +
-          'Station coverage and coordinates are incomplete until this recovers. Cause:',
-          error
-        );
-      }
-
-      stations = FALLBACK_STATIONS.map(transformMavStation);
-      source = 'fallback';
-      writeCache(stations, FALLBACK_CACHE_TTL_SECONDS);
-      console.error(`⚠️ Using fallback station data (${stations.length} stations instead of the full network)`);
+    stations = await readLegacyCache();
+    if (stations) {
+      source = 'cache';
+      cacheHit = true;
+      memoryCache = { stations, source, expiresAt: Date.now() + MEMORY_CACHE_TTL_MS };
     }
+  }
+
+  if (!stations) {
+    // LOUD. A silent fallback to 35 hardcoded stations is how this went
+    // unnoticed for months.
+    console.error(
+      '🚨 No GTFS station list in Redis (is the worker running with MAV_GTFS_USER / MAV_GTFS_PASSWORD?) ' +
+      `and no cached list - serving the hardcoded fallback of ${FALLBACK_STATIONS.length} stations.`
+    );
+    stations = FALLBACK_STATIONS.map(transformMavStation);
+    source = 'fallback';
+    cacheHit = false;
+    memoryCache = { stations, source, expiresAt: Date.now() + FALLBACK_MEMORY_TTL_MS };
   }
 
   let result = stations;

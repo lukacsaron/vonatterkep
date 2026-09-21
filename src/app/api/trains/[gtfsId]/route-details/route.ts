@@ -49,108 +49,59 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       console.warn(`Failed to check Redis cache for route ${gtfsId}:`, redisError);
     }
     
-    // Cache miss - fetch data from MÁV APIs in parallel
-    console.log(`🔄 Cache miss - fetching route data from MÁV APIs for ${gtfsId}`);
-    
+    // Cache miss. vonatinfo.mav.hu carries the timetable AND the route polyline
+    // for a train; ids stored as gtfsId are ElviraIDs, which is exactly what it
+    // expects. It is the only source: the OTP backend (mavplusz.hu) that used to
+    // be the fallback here IP-blocks this server.
+    let train;
     try {
-      // vonatinfo.mav.hu carries the timetable AND the route polyline for a
-      // train and, unlike the OTP backend, is reachable from this server. Ids
-      // stored as gtfsId are ElviraIDs, which is exactly what it expects.
-      try {
-        const viaVonatinfo = await mavApi.getRouteDetailsFromVonatinfo(gtfsId);
-        if (viaVonatinfo && viaVonatinfo.stops.length > 0) {
-          // Coordinates per stop let the map resolve which way the polyline runs.
-          const gtfsIndex = await withTimeout(loadGtfsIndex(redisClient), 'gtfs station index', 2000).catch(() => null);
-          const routeDetails: RouteDetails = {
-            gtfsId,
-            geometry: viaVonatinfo.geometry,
-            stops: gtfsIndex ? attachStationData(viaVonatinfo.stops, gtfsIndex.byName).stops : viaVonatinfo.stops,
-          };
-          try {
-            await redisClient.set(cacheKey, JSON.stringify(routeDetails), { EX: ROUTE_CACHE_TTL_SECONDS });
-          } catch (cacheError) {
-            console.warn(`Could not cache route for ${gtfsId}:`, cacheError);
-          }
-          return NextResponse.json(routeDetails, {
-            headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'X-Cache-Status': 'MISS',
-              'X-Data-Source': 'vonatinfo',
-            },
-          });
-        }
-      } catch (vonatinfoError) {
-        console.warn(`vonatinfo route lookup failed for ${gtfsId}:`, vonatinfoError);
-      }
-
-      // Parallel fetch of both geometry and trip details
-      const [geometry, trainDetails] = await Promise.all([
-        mavApi.getTrainGeometry(gtfsId),
-        mavApi.getTrainDetails(gtfsId)
-      ]);
-      
-      if (!geometry || !trainDetails) {
-        console.warn(`⚠️ Failed to get complete route data for ${gtfsId}:`, {
-          hasGeometry: !!geometry,
-          hasDetails: !!trainDetails,
-          stopsCount: trainDetails?.stops?.length
-        });
-        
-        return NextResponse.json(
-          { 
-            error: 'Route data not available',
-            details: 'Could not fetch complete route information for this train'
-          },
-          { status: 404 }
-        );
-      }
-      
-      // Assemble RouteDetails object
-      const routeDetails: RouteDetails = {
-        gtfsId,
-        geometry, // The encoded polyline string
-        stops: trainDetails.stops // Array of TrainStop objects
-      };
-      
-      console.log(`✅ Successfully fetched route details for ${gtfsId}:`, {
-        geometryLength: geometry.length,
-        stopsCount: trainDetails.stops.length
-      });
-      
-      // Cache the result
-      try {
-        await redisClient.set(
-          cacheKey,
-          JSON.stringify(routeDetails),
-          { EX: ROUTE_CACHE_TTL_SECONDS }
-        );
-        console.log(`💾 Cached route details for ${gtfsId} with TTL ${ROUTE_CACHE_TTL_SECONDS}s`);
-      } catch (cacheError) {
-        console.warn(`Failed to cache route details for ${gtfsId}:`, cacheError);
-      }
-      
-      return NextResponse.json(routeDetails, {
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'X-Cache-Status': 'MISS',
-          'X-Cache-Type': 'ROUTE',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      });
-      
-    } catch (apiError) {
-      console.error(`Failed to fetch route data from MÁV APIs for ${gtfsId}:`, apiError);
-      
+      train = await mavApi.getTrainFromVonatinfo(gtfsId);
+    } catch (vonatinfoError) {
+      console.error(`vonatinfo route lookup failed for ${gtfsId}:`, vonatinfoError);
       return NextResponse.json(
-        { 
+        {
           error: 'Failed to fetch route data',
-          details: apiError instanceof Error ? apiError.message : 'Unknown error'
+          details: vonatinfoError instanceof Error ? vonatinfoError.message : 'Unknown error'
         },
         { status: 502 }
       );
     }
-    
+
+    if (!train || train.stops.length === 0) {
+      console.warn(`No route data from vonatinfo for ${gtfsId}`);
+      return NextResponse.json(
+        {
+          error: 'Route data not available',
+          details: 'Could not fetch complete route information for this train'
+        },
+        { status: 404 }
+      );
+    }
+
+    // Coordinates per stop let the map resolve which way the polyline runs.
+    const gtfsIndex = await withTimeout(loadGtfsIndex(redisClient), 'gtfs station index', 2000).catch(() => null);
+    const routeDetails: RouteDetails = {
+      gtfsId,
+      geometry: train.geometry,
+      stops: gtfsIndex ? attachStationData(train.stops, gtfsIndex.byName).stops : train.stops,
+    };
+    try {
+      await redisClient.set(cacheKey, JSON.stringify(routeDetails), { EX: ROUTE_CACHE_TTL_SECONDS });
+    } catch (cacheError) {
+      console.warn(`Could not cache route for ${gtfsId}:`, cacheError);
+    }
+    console.log(`✅ vonatinfo route: ${routeDetails.stops.length} stops for ${gtfsId}`);
+    return NextResponse.json(routeDetails, {
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'X-Cache-Status': 'MISS',
+        'X-Cache-Type': 'ROUTE',
+        'X-Data-Source': 'vonatinfo',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      },
+    });
+
   } catch (error) {
     console.error(`Error in route-details endpoint:`, error);
     

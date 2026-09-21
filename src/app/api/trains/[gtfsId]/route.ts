@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { mavApi } from '@/lib/api/mav';
-import { transformMavTrain } from '@/lib/api/transformers';
 import { redisClient } from '@/lib/redis';
 import { Train } from '@/types';
 import { attachStationData, loadGtfsIndex } from '@/lib/gtfs/stations';
 import { withTimeout } from '@/lib/trainSnapshot';
+import { applyTrainIdentity } from '@/lib/trains/identity';
+import { redisIdentityStore, writeTrainIdentity } from '@/lib/trains/identityEnrichment';
 
 const HASH_KEY = 'trains:live';
 
@@ -42,28 +43,40 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           
           if (trainDetails) {
             console.log(`✅ Found enhanced details with ${trainDetails.stops.length} stops`);
-            // Convert TrainDetails to route format that the UI expects
-            // Stops from vonatinfo have names but no coordinates; take them from GTFS.
-            const gtfsIndex = await withTimeout(loadGtfsIndex(redisClient), 'gtfs station index', 2000).catch(() => null);
-            const stops = gtfsIndex ? attachStationData(trainDetails.stops, gtfsIndex.byName).stops : trainDetails.stops;
-            const route = stops.map(stop => ({
-              station: {
-                id: stop.id || '',
-                name: stop.name,
-                coordinates: stop.coordinates
-              },
-              arrival: stop.scheduledArrival,
-              departure: stop.scheduledDeparture,
-              actualArrival: stop.actualArrival,
-              actualDeparture: stop.actualDeparture,
-              platform: stop.platform || undefined,
-              delay: stop.arrivalDelay,
-              isPassed: stop.isPassed
-            }));
-            
-            // Add enhanced details to train object
-            train.route = route;
-            train.trainName = trainDetails.trainName;
+            if (trainDetails.stops.length > 0) {
+              // Convert TrainDetails to route format that the UI expects
+              // Stops from vonatinfo have names but no coordinates; take them from GTFS.
+              const gtfsIndex = await withTimeout(loadGtfsIndex(redisClient), 'gtfs station index', 2000).catch(() => null);
+              const stops = gtfsIndex ? attachStationData(trainDetails.stops, gtfsIndex.byName).stops : trainDetails.stops;
+              train.route = stops.map(stop => ({
+                station: {
+                  id: stop.id || '',
+                  name: stop.name,
+                  coordinates: stop.coordinates
+                },
+                arrival: stop.scheduledArrival,
+                departure: stop.scheduledDeparture,
+                actualArrival: stop.actualArrival,
+                actualDeparture: stop.actualDeparture,
+                platform: stop.platform || undefined,
+                delay: stop.arrivalDelay,
+                isPassed: stop.isPassed
+              }));
+            }
+
+            // Number, name, category and line come in the same TRAIN answer:
+            // the slide-in is right immediately, however far the worker's
+            // enrichment has got. Caching it saves the worker that request.
+            if (trainDetails.identity) {
+              applyTrainIdentity(train, trainDetails.identity);
+              if (train.operator !== 'HEV') {
+                await withTimeout(
+                  writeTrainIdentity(redisIdentityStore(redisClient), gtfsId, trainDetails.identity),
+                  'identity cache write',
+                  1000
+                ).catch(() => undefined);
+              }
+            }
           } else {
             console.warn(`⚠️ No enhanced details found for ${gtfsId}`);
           }
