@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,json,css,md}\"",
     "cloudflare:setup": "node scripts/cloudflare-setup.js",
-    "check:api": "tsx scripts/check-api-base.ts"
+    "check:api": "tsx scripts/check-api-base.ts",
+    "check:stations": "tsx scripts/check-station-search.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.14",

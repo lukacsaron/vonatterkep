@@ -51,6 +51,7 @@ src/lib/api/mav.ts     vonatinfo client + parsers for its HTML payloads
 src/lib/api/endpoints.ts  typed endpoint map — add endpoints here, not as strings
 src/lib/gtfs/*         zip reader, CSV parser, station list + name index
 src/lib/trains/*       identity (number/category/line) and search matching
+src/lib/stations/*     station search and the arrivals shown under a match in ⌘K
 src/lib/trainSnapshot.ts  what /api/trains serves and when it refuses to
 src/lib/time/*         Budapest wall-clock handling
 worker/index.ts        the poller: positions, snapshots, GTFS, identity
