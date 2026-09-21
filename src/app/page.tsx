@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, Suspense } from 'react';
+import { useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/app/components/UI/Navbar';
 import { LoadingSpinner } from '@/app/components/UI/LoadingSpinner';
@@ -13,8 +13,11 @@ import { StaleDataBanner } from '@/app/components/UI/StaleDataBanner';
 function HomeContent() {
   const searchParams = useSearchParams();
   const { data: trains } = useTrains();
-  const { setSelectedTrain, setFocusedTrain } = useMapStore();
-  const freshness = getDataFreshness(trains);
+  // Select the two actions rather than the whole store: subscribing to the
+  // store re-rendered this page shell on every map pan.
+  const setSelectedTrain = useMapStore(state => state.setSelectedTrain);
+  const setFocusedTrain = useMapStore(state => state.setFocusedTrain);
+  const freshness = useMemo(() => getDataFreshness(trains), [trains]);
 
   useEffect(() => {
     const trainParam = searchParams.get('train');

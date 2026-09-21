@@ -70,7 +70,7 @@ export default function MiEzIttPage() {
             "@type": "WebApplication",
             "name": "VasútTérkép",
             "description": "Élő vonatkövetés és vasúti információs rendszer Magyarországon",
-            "url": "https://vonatterkep.app.jazzrabbit.eu",
+            "url": "https://vasutterkep.hu",
             "applicationCategory": "TransportationApplication",
             "operatingSystem": "Web Browser",
             "offers": {
@@ -283,12 +283,13 @@ export default function MiEzIttPage() {
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900 mb-4">Adatok forrása</h3>
                   <p className="text-gray-700 mb-4">
-                    Az alkalmazás a <strong>MÁV hivatalos API-jait</strong> használja:
+                    Az alkalmazás a <strong>MÁV hivatalos adatforrásait</strong> használja:
                   </p>
                   <ul className="space-y-2 text-gray-700">
-                    <li>• EMMA GraphQL API - élő vonatkövető adatok</li>
-                    <li>• MobileService REST API - menetrendek, állomások</li>
-                    <li>• Percenként frissülő információk</li>
+                    <li>• vonatinfo.mav.hu – élő vonatpozíciók és késések</li>
+                    <li>• vonatinfo.mav.hu – vonatok menetrendje és állomási táblák</li>
+                    <li>• MÁV GTFS menetrendi adatbázis – állomások és koordinátáik</li>
+                    <li>• A pozíciók percenként frissülnek</li>
                   </ul>
                 </div>
                 <div>
@@ -299,8 +300,9 @@ export default function MiEzIttPage() {
                       • Látogatottsági statisztikához Google Analytics-et használunk, de csak
                       ha hozzájárulsz (<a href="#adatvedelem" className="text-blue-600 underline hover:text-blue-800">részletek lent</a>)
                     </li>
-                    <li>• Tiszteletben tartjuk a MÁV rendszereit</li>
-                    <li>• Rate limiting: max. 1 kérés/perc</li>
+                    <li>• Tiszteletben tartjuk a MÁV rendszereit: percenként egy
+                      lekérdezés a vonatpozíciókra, a menetrendi adatbázist pedig
+                      naponta egyszer töltjük le</li>
                   </ul>
                 </div>
               </div>

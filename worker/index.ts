@@ -30,7 +30,6 @@ const FETCH_INTERVAL_MS = parseInt(process.env.WORKER_FETCH_INTERVAL_MS || '6000
 const CACHE_KEY = 'cache:trains:live';
 const HASH_KEY = 'trains:live';
 const CACHE_TTL_SECONDS = 60;
-const REDIS_CHANNEL = 'trains:updates';
 const VEHICLE_MAX_AGE_MINUTES = Math.round(WORKER_VEHICLE_MAX_AGE_MS / 60000);
 
 function nonNegativeIntFromEnv(name: string, fallback: number): number {
@@ -280,7 +279,6 @@ async function runFetchCycle(): Promise<boolean> {
     }
 
     // 6. Publish update notification
-    await redisClient.publish(REDIS_CHANNEL, 'new-data');
 
     console.log(`Successfully cached ${trainsWithValidIds.length} trains and published update.`);
     return true;

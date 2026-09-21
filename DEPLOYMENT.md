@@ -1,189 +1,61 @@
-# VasútTérkép Deployment Guide for Coolify
+# Deployment
 
-## Prerequisites
-- Coolify instance running
-- Git repository with VasútTérkép code
-- Mapbox account and access token
-- Domain name (optional)
+Production runs on a Coolify-managed Docker host: one container with the Next.js
+standalone server and the background worker (`start.sh` runs both; if either
+dies the container exits and Coolify restarts it), plus a Coolify-managed Redis.
 
-## Quick Start
+## Pipeline
 
-1. **Run the deployment script:**
-   ```bash
-   ./scripts/deploy.sh
-   ```
+Push to `main` → GitHub Actions (`.github/workflows/ci.yml`):
 
-2. **Configure environment variables** (copy `.env.production` to `.env.local`)
+1. `checks` — `npm ci`, both typechecks (`tsc --noEmit` and
+   `tsconfig.worker.json`), `npm run check:api`, a production build, and a guard
+   that fails if `rootMainFiles` contains a `.css` entry.
+2. `deploy` — only after `checks` pass, POSTs to Coolify's deploy API with the
+   `COOLIFY_API_TOKEN` secret.
 
-3. **Push to Git and deploy via Coolify**
+Coolify's own deploy-on-push is off, so nothing reaches production without the
+checks. Two failed builds once left the site down for 25 hours; that is what
+this gate is for.
 
-## Step-by-Step Deployment
+## Environment variables
 
-### 1. Prepare Environment
+Build time (Next inlines them, so they must be marked "Available at Buildtime"):
 
-```bash
-# Copy environment template
-cp .env.production .env.local
+| Variable | Notes |
+|---|---|
+| `NEXT_PUBLIC_MAPBOX_TOKEN` | public token, URL-restricted to the site's domains |
+| `NEXT_PUBLIC_API_URL` | may be the bare origin; the client appends `/api` itself |
 
-# Edit environment variables
-nano .env.local
-```
+Runtime only — **never** mark these build-time:
 
-**Required Variables:**
-- `NEXT_PUBLIC_MAPBOX_TOKEN` - Get from https://mapbox.com
-- `JWT_SECRET` - Generate: `openssl rand -base64 32`
-- `NEXTAUTH_SECRET` - Generate: `openssl rand -base64 32`
-- `REDIS_URL` - Will be configured in Coolify
+| Variable | Notes |
+|---|---|
+| `REDIS_URL` | contains a password |
+| `ADMIN_API_TOKEN` | guards `/api/admin/*`; unset means those endpoints refuse everything |
+| `MAV_GTFS_USER`, `MAV_GTFS_PASSWORD` | MÁV GTFS download credentials |
+| `PORT`, `NODE_ENV` | |
 
-### 2. Create Redis Service in Coolify
+`NODE_ENV=production` marked build-time is what once broke the build: Coolify
+injects build-time vars as `ARG` lines above `npm ci`, so npm skipped
+devDependencies and the build failed with misleading "module not found" errors.
 
-1. Go to Coolify Dashboard
-2. **New Resource** → **Service** → **Redis**
-3. Configuration:
-   - Name: `vonatterkep-redis`
-   - Password: Generate secure password
-   - Memory: 256MB (or as needed)
-4. Deploy and note the connection string
+## Health
 
-### 3. Create Application in Coolify
+`/api/health` is the container healthcheck. It returns **200 even when
+degraded** (Redis down, data stale) and 503 only when the app itself is broken —
+a 503 makes the orchestrator destroy a working container over a dependency
+outage. It reports the age of the train data, so staleness is visible.
 
-1. **New Resource** → **Application**
-2. **Source**: Connect your Git repository
-3. **Configuration**:
-   - Name: `vonatterkep`
-   - Port: `3000`
-   - Build Pack: `Dockerfile`
-   - Branch: `main`
+`curl -I https://vasutterkep.hu/api/trains` shows `X-Data-Source`
+(`live`/`snapshot`/`none`), `X-Data-Age-Seconds` and `X-Data-Reason`.
 
-### 4. Configure Environment Variables in Coolify
+## Checks after a deploy
 
 ```bash
-# Application
-NODE_ENV=production
-PORT=3000
-
-# URLs (replace with your domain)
-NEXT_PUBLIC_API_URL=https://vonatterkep.your-domain.com/api
-NEXTAUTH_URL=https://vonatterkep.your-domain.com
-
-# Mapbox
-NEXT_PUBLIC_MAPBOX_TOKEN=pk.your_actual_mapbox_token
-
-# Redis (from step 2)
-REDIS_URL=redis://:password@vonatterkep-redis:6379
-
-# Security
-JWT_SECRET=your-generated-jwt-secret
-NEXTAUTH_SECRET=your-generated-nextauth-secret
-
-# Optional: Monitoring
-SENTRY_DSN=your-sentry-dsn
+./scripts/verify-deployment.sh            # /api/health, /api/stations, /api/trains
+curl -sI https://vasutterkep.hu/api/trains | grep x-data
 ```
 
-### 5. Configure Networking
-
-1. **Domain**: Add your domain or use Coolify subdomain
-2. **SSL**: Enable automatic SSL certificate
-3. **Network**: Ensure Redis and app are on same network
-
-### 6. Health Checks
-
-Coolify will automatically configure health checks using `/api/health`
-
-### 7. Deploy
-
-1. Click **Deploy** in Coolify
-2. Monitor build logs
-3. Verify deployment at your domain
-4. Test functionality
-
-## Monitoring and Maintenance
-
-### Health Check Endpoint
-- URL: `https://your-domain.com/api/health`
-- Returns app status, Redis connection, memory usage
-
-### Log Monitoring
-- **Application logs**: Available in Coolify dashboard
-- **Error tracking**: Configure Sentry (optional)
-
-### Backup Strategy
-- **Redis**: Enable periodic backups in Coolify
-- **Code**: Ensure Git repository is backed up
-
-## Troubleshooting
-
-### Common Issues
-
-**Build Failures:**
-```bash
-# Check Node.js version compatibility
-node --version  # Should be 18+
-
-# Clean build
-rm -rf .next node_modules
-npm ci
-npm run build
-```
-
-**Redis Connection Issues:**
-- Verify Redis service is running
-- Check network connectivity
-- Validate REDIS_URL format
-
-**Environment Variable Issues:**
-- Ensure all required variables are set
-- Check for typos in variable names
-- Verify Mapbox token is valid
-
-### Debug Commands
-
-```bash
-# Test health endpoint
-curl https://your-domain.com/api/health
-
-# Check Redis connection locally
-redis-cli -u $REDIS_URL ping
-
-# Validate environment
-npm run build  # Should complete without errors
-```
-
-## Performance Optimization
-
-### Production Settings
-- **Redis Memory**: Monitor usage, increase if needed
-- **Node.js Memory**: Default limits should be sufficient
-- **CDN**: Consider adding Cloudflare for static assets
-
-### Scaling
-- **Horizontal**: Deploy multiple app instances
-- **Vertical**: Increase CPU/RAM in Coolify
-- **Database**: Monitor Redis performance
-
-## Security Checklist
-
-- ✅ HTTPS enabled and enforced
-- ✅ Environment variables secured
-- ✅ JWT secrets are randomly generated
-- ✅ Redis password protected
-- ✅ Firewall configured (if applicable)
-- ✅ Regular security updates
-
-## Files Created for Deployment
-
-- `Dockerfile` - Multi-stage production build
-- `.dockerignore` - Excludes unnecessary files
-- `next.config.js` - Production optimization
-- `docker-compose.yml` - Local testing
-- `.env.production` - Environment template
-- `src/app/api/health/route.ts` - Health monitoring
-- `scripts/deploy.sh` - Deployment helper script
-
-## Support
-
-For deployment issues:
-1. Check application logs in Coolify
-2. Verify health endpoint status
-3. Test individual components (Redis, API endpoints)
-4. Review environment variable configuration
+Redis must be up **before** the app deploys: `/api/health` talks to Redis, and a
+Redis outage during the healthcheck window fails the deployment.

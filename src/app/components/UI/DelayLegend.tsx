@@ -36,6 +36,9 @@ export function DelayLegend() {
           <span>60+ perc késés</span>
         </div>
       </div>
-    </div>
+          <div className="mt-2 border-t border-gray-200 pt-2 text-[11px] leading-snug text-gray-500">
+        5 perc fölött a késés percben is megjelenik a vonat mellett (nagyításkor).
+      </div>
+</div>
   );
 }

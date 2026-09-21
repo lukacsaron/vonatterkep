@@ -1,190 +1,78 @@
-# VasútTérkép Project Guide
+# VasútTérkép — project guide
 
-## Project Overview
-VasútTérkép is a modern web application for real-time Hungarian railway (MÁV) tracking and journey planning. It provides live train positions, delay information, route planning, and station details.
+Live map of trains on the Hungarian rail network. Next.js 15 (App Router) plus a
+background worker, both in one container, with Redis as the only datastore.
 
-## Tech Stack
-- **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui
-- **Maps**: Mapbox GL JS
-- **State Management**: Zustand
-- **Data Fetching**: TanStack Query
-- **Real-time**: Socket.io
-- **Backend**: Node.js, Express, GraphQL (Apollo Server)
-- **Database**: PostgreSQL with PostGIS, Redis
-- **Infrastructure**: Docker, Kubernetes
+## Commands
 
-## Key Commands
 ```bash
-# Development
-npm run dev       # Start development server with Turbopack
-npm run build     # Build for production
-npm run start     # Start production server
-
-# Code Quality
-npm run lint      # Run ESLint
-npm run typecheck # Run TypeScript type checking
-npm run format    # Format code with Prettier
-
-# Testing
-npm run test      # Run unit tests
-npm run test:e2e  # Run E2E tests
-npm run test:ci   # Run all tests for CI
-
-# Database
-npm run db:migrate    # Run database migrations
-npm run db:seed       # Seed development data
-npm run db:reset      # Reset database
+npm run dev            # next dev on :3000
+npm run dev:worker     # the background poller (tsx)
+npm run build          # next build + tsc -p tsconfig.worker.json
+npm start              # next start
+npm run start:standalone  # exactly what production runs
+npm run typecheck      # tsc --noEmit
+npm run check:api      # pins API paths + NEXT_PUBLIC_API_URL handling
+npm run lint
 ```
 
-## Project Structure
+There is no test suite. `npm run check:api` and CI (typechecks + build + a guard
+that no CSS file ends up in `rootMainFiles`) are what stand in for one.
+
+## Where the data comes from
+
+| Source | Used for | Notes |
+|---|---|---|
+| `vonatinfo.mav.hu/map.aspx/getData` | live positions and delays (`TRAINS`), a train's timetable, category and polyline (`TRAIN`), a station's board (`STATION`) | POST, gzipped, XML-converted-to-JSON so fields are `@`-prefixed. The station board is looked up by station NAME. |
+| MÁV GTFS (`mavcsoport.hu/gtfs/gtfsMavMenetrend.zip`) | the station list with coordinates | HTTP Basic auth; the worker checks hourly with `If-Modified-Since` and downloads only on change |
+
+Dead ends, do not reintroduce: `mavplusz.hu` (the OTP/EMMA backend) IP-blocks this
+server with 403 "host limit achived"; `vim.mav-start.hu` (MobileService) is gone.
+
+Identifiers are messy, deliberately handled in code:
+- `Train.gtfsId` holds vonatinfo's **ElviraID**, not a GTFS id. The name is kept
+  because the frontend and the typed API client depend on it.
+- `Train.id` is the raw feed number (with the operator prefix) so old `?train=`
+  links keep working; `Train.number` is the public number (`55142` → `142`).
+- GTFS stop ids match neither vonatinfo nor the old ids, so stations are linked
+  **by name** (names are unique in the feed). `src/lib/gtfs/legacyStationIds.ts`
+  maps every station id the site ever served onto a name.
+
+**Times are the sharpest edge here.** vonatinfo returns Budapest wall clock with
+no timezone and the server runs UTC. Always build instants through
+`src/lib/time/budapest.ts` / `wallClock.ts`; `new Date(y, m, d)` or `setHours()`
+silently lands two hours out.
+
+## Layout
+
 ```
-src/
-├── app/              # Next.js app directory
-│   ├── api/          # API routes
-│   ├── (routes)/     # Page routes
-│   └── components/   # Shared components
-├── lib/              # Utility functions
-│   ├── api/          # API client functions
-│   ├── hooks/        # Custom React hooks
-│   └── utils/        # Helper functions
-├── services/         # Backend services (if monorepo)
-└── types/            # TypeScript type definitions
+src/app/api/*          REST layer the frontend talks to
+src/lib/api/mav.ts     vonatinfo client + parsers for its HTML payloads
+src/lib/api/endpoints.ts  typed endpoint map — add endpoints here, not as strings
+src/lib/gtfs/*         zip reader, CSV parser, station list + name index
+src/lib/trains/*       identity (number/category/line) and search matching
+src/lib/trainSnapshot.ts  what /api/trains serves and when it refuses to
+src/lib/time/*         Budapest wall-clock handling
+worker/index.ts        the poller: positions, snapshots, GTFS, identity
 ```
 
-## API Endpoints
-- GraphQL endpoint: `/api/graphql`
-- REST fallback: `/api/v1/*`
-- WebSocket: `ws://localhost:3000/socket.io`
+Redis keys: `trains:live` (hash), `trains:snapshot:latest`, `gtfs:stations`,
+`gtfs:meta`, `cache:stations:all`, `cache:route:<elviraId>`,
+`vonatinfo:identity:<elviraId>`.
 
-## Environment Variables
-```
-# API Keys
-NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token
-MAV_API_KEY=your_mav_api_key
+## The worker, once a minute
 
-# Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/vonatterkep
-REDIS_URL=redis://localhost:6379
+Fetches all positions in one request, derives heading and speed by comparing
+with the previous sample, drops vehicles older than 120 minutes, writes the hash
+plus a snapshot, and backs off exponentially when upstream fails. On top of that
+it spends at most 4 requests a cycle learning train identities, and checks GTFS
+hourly (conditionally).
 
-# Auth
-JWT_SECRET=your_jwt_secret
-```
+Be frugal with upstream requests. MÁV IP-blocked this server once already, after
+the worker issued ~25,000 requests an hour; the site then served 434-day-old
+positions for months because nothing noticed.
 
-## Key Features
-1. Real-time train tracking on interactive map ✅
-2. Global search with Cmd+K shortcut ✅
-3. Station departure/arrival boards ✅
-4. Journey planning with multiple routes
-5. User accounts with favorites
-6. Delay notifications
-7. Offline support (PWA)
+## Deployment
 
-## Data Sources
-- **MÁV EMMA GraphQL API**: Real-time train positions (primary)
-- **MÁV MobileService REST API**: Stations and departures
-- **Authentication**: 
-  - EMMA API: User-Agent header (no API key needed)
-  - MobileService API: Hardcoded UAID token (from reference)
-- **Fallback**: Mock data if APIs fail
-
-## MÁV API Integration
-The app integrates with real MÁV APIs using patterns from reference implementations:
-
-### Why No API Key is Needed:
-1. **EMMA GraphQL API**: Public endpoint used by MÁV's website
-2. **MobileService API**: Uses a static UAID token found in reference
-3. **Rate Limiting**: APIs are public but may have usage limits
-4. **CORS**: Server-side proxy prevents browser CORS issues
-
-### API Endpoints Used:
-- `POST /VIM/PR/150225/MobileService.svc/rest/GetAlapadatok` - Stations
-- `POST /VIM/PR/150225/MobileService.svc/rest/GetAllomasInfo` - Departures  
-- `POST /jegy.mav.hu/api/graphql` - Real-time train positions
-
-### Data Flow:
-1. Client requests `/api/trains`
-2. Server calls MÁV EMMA API for real-time positions
-3. Fallback to MobileService API if needed
-4. Transform MÁV data format to app format
-5. Return standardized train data to client
-
-## Performance Requirements
-- Page load: <2s on 3G
-- API response: <200ms p95
-- Support 100k+ concurrent users
-- 99.9% uptime target
-
-## Security Considerations
-- Rate limiting on all API endpoints
-- Input validation and sanitization
-- JWT authentication for user endpoints
-- HTTPS only with HSTS
-- CSP headers for XSS protection
-
-## Development Workflow
-1. Create feature branch from `main`
-2. Implement feature with tests
-3. Run linting and type checking
-4. Create PR with description
-5. Deploy to staging after approval
-6. Monitor metrics post-deployment
-
-## Useful Resources
-- MÁV API Docs: [reference implementations in references/ folder]
-- Mapbox Docs: https://docs.mapbox.com
-- Next.js Docs: https://nextjs.org/docs
-- shadcn/ui: https://ui.shadcn.com
-
-## Search Functionality
-
-### Global Search (Cmd+K)
-The app features a powerful global search accessible via:
-- **Keyboard Shortcut**: `Cmd+K` (Mac) or `Ctrl+K` (Windows/Linux)
-- **Navigation**: Click "Search" in the navbar
-- **Direct URL**: `/search`
-
-### Search Features
-- **Fuzzy Matching**: Searches train numbers, names, and routes
-- **Real-time Results**: Updates as you type with 150ms debounce
-- **Keyboard Navigation**: Arrow keys, Enter to select, Escape to close
-- **Smart Relevance**: Exact matches ranked higher than partial matches
-- **Map Integration**: Selecting a train zooms the map and focuses on it
-
-### Search Types
-1. **Train Numbers**: "IC 560", "S80", "9001" - exact and partial matches
-2. **Train Names**: "LATORCA", "TISZA" - special named trains
-3. **Routes/Destinations**: "Budapest Szeged", "Veszprém" - by station names
-4. **Mixed Search**: Automatically detects and ranks by relevance
-
-### Implementation
-- `useTrainSearch` hook: Fuzzy search with relevance scoring
-- `SearchModal` component: Full keyboard navigation and UI
-- `GlobalSearchProvider`: App-wide Cmd+K shortcut handling
-- `zoomToTrain` store action: Map integration for search results
-
-## Common Tasks
-
-### Adding a New Page
-1. Create route in `src/app/`
-2. Add types in `src/types/`
-3. Create API client in `src/lib/api/`
-4. Add components in `src/app/components/`
-5. Include `<Navbar />` for consistent navigation
-
-### Adding API Endpoint
-1. Create route in `src/app/api/`
-2. Add validation with zod
-3. Implement rate limiting
-4. Add to GraphQL schema if applicable
-
-### Deploying
-1. Run tests: `npm run test:ci`
-2. Build: `npm run build`
-3. Deploy with Docker/Kubernetes
-4. Monitor logs and metrics
-
-## Notes
-- Always check existing MÁV API responses before implementing
-- Prioritize mobile experience (70%+ users)
-- Keep real-time updates efficient to reduce server load
-- Cache aggressively but invalidate smartly
+Push to `main` → GitHub Actions runs the checks → on success it calls Coolify's
+deploy API. See DEPLOYMENT.md.
