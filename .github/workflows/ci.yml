@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Superseded PR runs are cancelled. Runs on main are never cancelled
+  # mid-flight (that could interrupt a deploy); they queue instead.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Type-check app
+        run: npx tsc --noEmit
+
+      - name: Type-check worker
+        run: npx tsc --project tsconfig.worker.json --noEmit
+
+      - name: API client checks
+        run: npm run check:api
+
+      - name: Production build (Next.js + worker)
+        run: NEXT_TELEMETRY_DISABLED=1 npm run build
+
+      # Regression guard: when splitChunks was once replaced wholesale in
+      # next.config.js, a .css file landed in rootMainFiles and Next emitted
+      # <script src="....css">, which throws a SyntaxError in every browser.
+      - name: Guard against CSS in rootMainFiles
+        run: |
+          node -e '
+            const files = require("./.next/build-manifest.json").rootMainFiles;
+            if (!Array.isArray(files) || files.length === 0) {
+              console.error("::error::.next/build-manifest.json has no rootMainFiles; cannot verify the CSS-as-script guard");
+              process.exit(1);
+            }
+            console.log("rootMainFiles:\n  " + files.join("\n  "));
+            const css = files.filter((f) => /\.css(\?|$)/.test(f));
+            if (css.length > 0) {
+              console.error("::error::rootMainFiles contains CSS (Next would emit it as <script src>): " + css.join(", "));
+              process.exit(1);
+            }
+            console.log("OK: every rootMainFiles entry is JavaScript.");
+          '
+
+  deploy:
+    name: deploy
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger Coolify deploy
+        env:
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: |
+          if [ -z "$COOLIFY_API_TOKEN" ]; then
+            echo "COOLIFY_API_TOKEN is not set: CI did NOT trigger a Coolify deploy."
+            echo "::warning title=Deploy skipped::Repository secret COOLIFY_API_TOKEN is not set, so this push was checked but not deployed by CI."
+            exit 0
+          fi
+          curl -fsS -X POST "https://coolify.jazzrabbit.eu/api/v1/deploy?uuid=n408sg44kcc4g00gkso84400" -H "Authorization: Bearer $COOLIFY_API_TOKEN"
