@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node server.js",
+    "dev": "next dev",
     "build": "next build && tsc --project tsconfig.worker.json",
     "start": "npm run start:web",
-    "start:web": "NODE_ENV=production node server.js",
+    "start:web": "next start",
+    "start:standalone": "cp -R public .next/standalone/ && cp -R .next/static .next/standalone/.next/ && node .next/standalone/server.js",
     "start:worker": "node dist/worker/index.js",
     "dev:worker": "tsx worker/index.ts",
     "lint": "next lint",
@@ -25,13 +26,11 @@
     "clsx": "^2.1.1",
     "dotenv": "^16.4.5",
     "lucide-react": "^0.522.0",
-    "mapbox-gl": "^3.13.0",
-    "next": "15.3.4",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "mapbox-gl": "^3.31.0",
+    "next": "15.5.25",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "redis": "^4.6.15",
-    "socket.io": "^4.7.5",
-    "socket.io-client": "^4.7.5",
     "tailwind-merge": "^3.3.1",
     "zustand": "^5.0.5"
   },
@@ -39,17 +38,22 @@
     "@tanstack/react-query-devtools": "^5.81.2",
     "@types/mapbox-gl": "^3.4.1",
     "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.29.0",
-    "eslint-config-next": "^15.3.4",
+    "eslint-config-next": "^15.5.25",
     "eslint-config-prettier": "^10.1.5",
-    "postcss": "^8.4.47",
+    "postcss": "^8.5.28",
     "prettier": "^3.6.0",
     "tailwindcss": "^3.4.15",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.2",
     "typescript": "^5"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "^8.5.28"
+    }
   }
 }

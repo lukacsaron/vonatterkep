@@ -25,7 +25,12 @@ const nextConfig = {
   
   // SWC optimizations (minification is enabled by default in Next.js 15)
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
+    // Strip console.log/info/debug from production bundles, but KEEP
+    // console.error and console.warn. removeConsole applies to server code
+    // too: with `true` the API routes compiled to zero log lines, so a week of
+    // HTTP 500s in production left no trace in the container logs.
+    removeConsole:
+      process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
   },
   
   // Security response headers (applied to every route).
@@ -96,7 +101,9 @@ const nextConfig = {
   
   images: {
     formats: ['image/avif', 'image/webp'],
-    domains: ['api.mapbox.com'],
+    // Remote images the optimizer may fetch. (The deprecated `images.domains`
+    // entry was dropped: it allowed ANY path on api.mapbox.com, and nothing in
+    // the app passes a remote URL to next/image.)
     remotePatterns: [
       {
         protocol: 'https',

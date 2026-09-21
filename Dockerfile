@@ -1,5 +1,5 @@
-# Use Node.js 18 Alpine as base
-FROM node:18-alpine AS base
+# Node.js 22 LTS on Alpine (Node 18 has been end-of-life since April 2025)
+FROM node:22-alpine AS base
 
 # Install system dependencies
 RUN apk add --no-cache libc6-compat curl
@@ -24,7 +24,7 @@ ENV NODE_ENV=production
 RUN npm run build
 
 # Create production runtime
-FROM node:18-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 # Install system dependencies for runtime
