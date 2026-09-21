@@ -3,6 +3,7 @@ import { mavApi, MavArrival, MavDeparture } from '@/lib/api/mav';
 import { transformMavDeparture, transformMavArrival } from '@/lib/api/transformers';
 import { redisClient } from '@/lib/redis';
 import { findStationByName, loadGtfsIndex } from '@/lib/gtfs/stations';
+import { LEGACY_STATION_NAMES } from '@/lib/gtfs/legacyStationIds';
 import { vonatinfoDateParam } from '@/lib/time/budapest';
 import { withTimeout } from '@/lib/trainSnapshot';
 import { Station } from '@/types';
@@ -33,6 +34,14 @@ async function resolveStation(stationId: string): Promise<Station | null> {
   const index = await withTimeout(loadGtfsIndex(redisClient), 'gtfs station index', REDIS_TIMEOUT_MS).catch(() => null);
   const fromGtfs = index?.byId.get(stationId);
   if (fromGtfs) return fromGtfs;
+
+  // Ids served by earlier versions of the site (see legacyStationIds.ts).
+  const legacyName = LEGACY_STATION_NAMES[stationId];
+  if (legacyName) {
+    const mapped = index && findStationByName(index.byName, legacyName);
+    if (mapped) return mapped;
+    return { id: stationId, name: legacyName };
+  }
 
   try {
     const raw = await withTimeout(redisClient.get('cache:stations:all') as Promise<string | null>, 'legacy station cache', REDIS_TIMEOUT_MS);

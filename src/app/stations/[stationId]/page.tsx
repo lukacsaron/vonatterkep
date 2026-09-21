@@ -11,6 +11,7 @@ import { Navbar } from '@/app/components/UI/Navbar';
 import { StyledTabsList, StyledTabsTrigger, StyledTabsContent, Tabs } from '@/app/components/UI/Tabs';
 import { useTimetable } from '@/lib/hooks/useTrains';
 import { useStations } from '@/lib/hooks/useStations';
+import { LEGACY_STATION_NAMES } from '@/lib/gtfs/legacyStationIds';
 import { Station, Departure } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -48,9 +49,15 @@ export default function StationTimetablePage({ params }: StationTimetablePagePro
       const station = stations.find(s => s.id === stationId);
       if (station) {
         setSelectedStation(station);
+      } else if (LEGACY_STATION_NAMES[stationId]) {
+        // An id from an earlier version of the site: move to the GTFS id so
+        // the name, map position and timetable all line up.
+        const legacyName = LEGACY_STATION_NAMES[stationId];
+        const current = stations.find(s => s.name === legacyName);
+        if (current) router.replace(`/stations/${encodeURIComponent(current.id)}`);
       }
     }
-  }, [stations, stationId, selectedStation]);
+  }, [stations, stationId, selectedStation, router]);
 
   // Handle station selection
   const handleStationSelect = (station: Station | null) => {

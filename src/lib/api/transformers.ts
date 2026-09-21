@@ -39,10 +39,15 @@ export function transformMavTrain(mavTrain: MavTrain, trainDetails?: TrainDetail
   if (stops && stops.length > 0) {
     origin = stationFromStop(stops[0]);
     destination = stationFromStop(stops[stops.length - 1]);
-  } else if (mavTrain.Celallomas && mavTrain.Celallomas !== 'Unknown') {
-    // Only a headsign string is available: keep the name, but do not invent an
-    // id or a position for it.
-    destination = { id: '', name: mavTrain.Celallomas };
+  } else {
+    // Only names are available (vonatinfo's @Relation): keep them, but do not
+    // invent an id or a position. The worker fills both in from GTFS.
+    if (mavTrain.Celallomas && mavTrain.Celallomas !== 'Unknown') {
+      destination = { id: '', name: mavTrain.Celallomas };
+    }
+    if (mavTrain.Kiindulas) {
+      origin = { id: '', name: mavTrain.Kiindulas };
+    }
   }
 
   const gps = mavTrain.UtolsoGPS;

@@ -158,6 +158,8 @@ export interface MavTrain {
   VonatSzam: string;
   Tipus: string;
   Celallomas: string;
+  /** Origin station name, when the source gives one (vonatinfo @Relation). */
+  Kiindulas?: string;
   UtolsoGPS?: {
     Lat: number;
     Lng: number;
@@ -895,6 +897,7 @@ class MavApiClient {
           VonatSzam: number,
           Tipus: t['@Menetvonal'] || 'MAV',
           Celallomas: destination || relation || '',
+          Kiindulas: origin || undefined,
           UtolsoGPS: {
             Lat: Number(t['@Lat']),
             Lng: Number(t['@Lon']),

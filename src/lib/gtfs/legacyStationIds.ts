@@ -1,0 +1,86 @@
+/**
+ * Station ids used by earlier versions of the site, mapped to station NAMES.
+ *
+ * The station list is now built from MÁV's GTFS feed, whose stop_ids differ
+ * from everything served before. These ids are still in bookmarks, shared links
+ * and search indexes, so they are resolved by name onto the GTFS station:
+ *  - 7-digit ids (e.g. 5500007): the MobileService-era fallback list, served
+ *    for about a year until September 2026
+ *  - "1:0055..." ids: the OTP-era fallback list, served in September 2026
+ *    (the OTP host was IP-blocked the whole time, so its full list never was)
+ *
+ * Names are GTFS names: "Budapest-Ferencváros" is "Ferencváros" there, and the
+ * old "Miskolc" entry meant the main station, "Miskolc-Tiszai".
+ */
+export const LEGACY_STATION_NAMES: Readonly<Record<string, string>> = {
+  '1:004302246': "Szombathely",
+  '1:004302725': "Sopron",
+  '1:005501016': "Budapest-Déli",
+  '1:005501024': "Budapest-Kelenföld",
+  '1:005501131': "Tatabánya",
+  '1:005501289': "Győr",
+  '1:005501511': "Esztergom",
+  '1:005502121': "Pápa",
+  '1:005503269': "Székesfehérvár",
+  '1:005503350': "Siófok",
+  '1:005503566': "Balatonszentgyörgy",
+  '1:005503624': "Nagykanizsa",
+  '1:005503947': "Veszprém",
+  '1:005504416': "Balatonfüred",
+  '1:005504598': "Tapolca",
+  '1:005504689': "Ukk",
+  '1:005504747': "Keszthely",
+  '1:005504895': "Zalaegerszeg",
+  '1:005506189': "Dombóvár",
+  '1:005506288': "Kaposvár",
+  '1:005507294': "Pécs",
+  '1:005510017': "Budapest-Keleti",
+  '1:005510033': "Budapest-Nyugati",
+  '1:005510447': "Vác",
+  '1:005511205': "Hatvan",
+  '1:005511387': "Miskolc-Tiszai",
+  '1:005512401': "Eger",
+  '1:005513482': "Sátoraljaújhely",
+  '1:005513722': "Cegléd",
+  '1:005513748': "Szolnok",
+  '1:005513912': "Debrecen",
+  '1:005514019': "Nyíregyháza",
+  '1:005517111': "Kecskemét",
+  '1:005517228': "Szeged",
+  '1:005518036': "Békéscsaba",
+  '5500001': "Budapest-Nyugati",
+  '5500002': "Ferencváros",
+  '5500004': "Budapest-Déli",
+  '5500007': "Budapest-Keleti",
+  '5510001': "Kecskemét",
+  '5510501': "Cegléd",
+  '5511001': "Sopron",
+  '5511501': "Szombathely",
+  '5511801': "Pápa",
+  '5512101': "Győr",
+  '5512401': "Vác",
+  '5512501': "Székesfehérvár",
+  '5512801': "Tatabánya",
+  '5513001': "Esztergom",
+  '5513604': "Debrecen",
+  '5514001': "Szolnok",
+  '5514201': "Hatvan",
+  '5514701': "Nyíregyháza",
+  '5515001': "Eger",
+  '5515501': "Sátoraljaújhely",
+  '5515801': "Miskolc-Tiszai",
+  '5516001': "Veszprém",
+  '5516101': "Ukk",
+  '5516201': "Balatonfüred",
+  '5516301': "Siófok",
+  '5516501': "Tapolca",
+  '5516801': "Zalaegerszeg",
+  '5516901': "Balatonszentgyörgy",
+  '5517001': "Keszthely",
+  '5517201': "Dombóvár",
+  '5517401': "Pécs",
+  '5517501': "Nagykanizsa",
+  '5518001': "Békéscsaba",
+  '5518701': "Szeged",
+  '5519001': "Kaposvár",
+};
