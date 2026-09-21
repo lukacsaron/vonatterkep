@@ -20,7 +20,9 @@ export function TimetableRow({
   className 
 }: TimetableRowProps) {
   const hasDelay = departure.delay > 0;
-  const actualTime = new Date(departure.time.getTime() + departure.delay * 60000);
+  // `time` is typed as Date but arrives from the API as an ISO string.
+  const scheduledTime = new Date(departure.time);
+  const actualTime = new Date(scheduledTime.getTime() + departure.delay * 60000);
   
   return (
     <div 

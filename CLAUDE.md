@@ -151,16 +151,29 @@ The app features a powerful global search accessible via:
 - **Map Integration**: Selecting a train zooms the map and focuses on it
 
 ### Search Types
-1. **Train Numbers**: "IC 560", "S80", "9001" - exact and partial matches
-2. **Train Names**: "LATORCA", "TISZA" - special named trains
-3. **Routes/Destinations**: "Budapest Szeged", "Veszprém" - by station names
-4. **Mixed Search**: Automatically detects and ranks by relevance
+1. **Stations**: "Balatonföldvár", "Győr" - every station, including intermediate
+   stops no train starts or ends at. Selecting one opens its timetable page.
+2. **Arriving Trains**: the next trains due at the best-matching station, shown
+   under it with time, origin and delay. Selecting one zooms the map to it.
+3. **Train Numbers**: "IC 560", "S80", "9001" - exact and partial matches
+4. **Train Names**: "LATORCA", "TISZA" - special named trains
+5. **Routes/Destinations**: "Budapest Szeged", "Veszprém" - by endpoint names
+
+Matching is accent-insensitive: "balatonfoldvar" finds "Balatonföldvár".
 
 ### Implementation
-- `useTrainSearch` hook: Fuzzy search with relevance scoring
-- `SearchModal` component: Full keyboard navigation and UI
+- `lib/search/match.ts`: pure matcher (normalize, score, rank, upcoming filter).
+  No React, so it is unit tested - `npm run test:search`.
+- `useGlobalSearch` hook: combines stations, station arrivals and live trains
+  into sections plus one flat list backing arrow-key navigation
+- `SearchModal` component: sectioned results, full keyboard navigation
 - `GlobalSearchProvider`: App-wide Cmd+K shortcut handling
-- `zoomToTrain` store action: Map integration for search results
+- `zoomToTrain` store action: Map integration for train results
+
+Station matching runs client-side against the full station list (cached one
+hour) rather than `/api/stations?search=`, which is one request instead of one
+per keystroke and is what makes accent-insensitive matching possible - the
+server-side filter is a plain `includes` and still requires exact accents.
 
 ## Common Tasks
 
