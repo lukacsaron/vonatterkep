@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
+import { useEffect, useRef, useState, useMemo, memo } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useMapStore, useLocationStore } from '@/lib/store';
@@ -9,72 +9,95 @@ import { TrainInfoModal } from '../Train/TrainInfoModal';
 import { LoadingSpinner } from '../UI/LoadingSpinner';
 import { DelayLegend } from '../UI/DelayLegend';
 import { LocationButton } from '../UI/LocationButton';
-import { Train, DelayCategory, Coordinates } from '@/types';
+import { Train, Coordinates } from '@/types';
 import { getDelayCategory, getDelayColor, decodePolyline, formatTime } from '@/lib/utils';
 import { decodeRoutePolyline, resolveRouteDirection, snapToRoute } from '@/lib/geo/snapToRoute';
-// --- ADDED: Import RefreshCw icon and cn utility ---
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Set Mapbox access token - hardcoded for simplicity
-mapboxgl.accessToken = 'pk.eyJ1IjoiYXJvbmx1a2FjcyIsImEiOiJjbWNmY3dzYTEwODJsMm1xeDRjcWlqNDM1In0.dp1ZMJivifhXprb0bzprTQ';
+const INITIAL_CENTER: [number, number] = [19.0408, 47.4979]; // Budapest [lng, lat]
+const INITIAL_ZOOM = 7;
 
-function TrainMapComponent() {
+// OpenRailwayMap's tile usage policy asks for exactly this attribution.
+const OPENRAILWAYMAP_ATTRIBUTION =
+  'Data <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>, ' +
+  'Style: <a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank" rel="noopener">CC-BY-SA 2.0</a> ' +
+  '<a href="https://www.openrailwaymap.org/" target="_blank" rel="noopener">OpenRailwayMap</a> and OpenStreetMap';
+
+// Delay is otherwise shown by marker colour only, which red-green colour-blind
+// visitors cannot tell apart. From this zoom, trains at least 5 minutes late (the
+// first non-green category) also get a "+N" minute label.
+const DELAY_LABEL_MIN_DELAY = 5;
+const DELAY_LABEL_MIN_ZOOM = 8;
+
+const TRAIN_LAYER_IDS = ['trains', 'train-arrows', 'train-delay-labels'] as const;
+
+interface TrainMapProps {
+  accessToken: string;
+}
+
+function TrainMapComponent({ accessToken }: TrainMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [showRailwayOverlay, setShowRailwayOverlay] = useState(true);
   
-  const { selectedTrain, focusedTrain, setSelectedTrain, setFocusedTrain, setBounds } = useMapStore();
-  // --- CHANGED: Destructure `isFetching` and `refetch` from the useTrains hook ---
+  // Individual selectors: subscribing to the whole store re-rendered the map on
+  // every setBounds() call, i.e. after every pan and zoom.
+  const selectedTrain = useMapStore(state => state.selectedTrain);
+  const focusedTrain = useMapStore(state => state.focusedTrain);
+  const setSelectedTrain = useMapStore(state => state.setSelectedTrain);
+  const setFocusedTrain = useMapStore(state => state.setFocusedTrain);
+  const setBounds = useMapStore(state => state.setBounds);
   const { data: trains, isLoading, isFetching, error, refetch } = useTrains();
   // Hook for fetching train route details
   const { data: routeDetails } = useTrainRoute(selectedTrain?.gtfsId || null);
   
   // Location store hooks
-  const { userLocation, isCentered, setIsCentered } = useLocationStore();
+  const userLocation = useLocationStore(state => state.userLocation);
+  const isCentered = useLocationStore(state => state.isCentered);
+  const setIsCentered = useLocationStore(state => state.setIsCentered);
   const [isInitialLocationSet, setIsInitialLocationSet] = useState(false);
 
-  console.log('TrainMap render:', { 
-    mapReady, 
-    trainsCount: trains?.length,
-    mapError,
-    mapCenter: map.current ? [map.current.getCenter().lng, map.current.getCenter().lat] : null,
-    sampleTrainPositions: trains?.slice(0, 3).map(t => t.position ? [t.position.longitude, t.position.latitude] : 'no position')
-  });
+  // The map's click handlers are registered once; they read the current trains
+  // through this ref instead of the array captured when the layers were created.
+  const trainsRef = useRef<Train[] | undefined>(trains);
+  useEffect(() => {
+    trainsRef.current = trains;
+  }, [trains]);
 
   // Initialize map
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
-    console.log('Initializing map...');
+    // Tile failures after the first load (an OpenRailwayMap tile timing out, a
+    // 5xx) are transient and leave the rest of the map working, so only errors
+    // before the map has loaded replace it with the error view.
+    let hasLoaded = false;
+    let boundsTimeout: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      // Initialize map centered on Hungary
-      const initialCenter: [number, number] = [19.0408, 47.4979]; // Budapest coordinates [lng, lat]
-      const initialZoom = 7;
-      
-      console.log('🗺️ Initializing map with center:', initialCenter, 'zoom:', initialZoom);
-      
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
+        accessToken,
         style: 'mapbox://styles/mapbox/streets-v12',
-        center: initialCenter,
-        zoom: initialZoom,
+        center: INITIAL_CENTER,
+        zoom: INITIAL_ZOOM,
         // Explicitly set coordinate system - Mapbox uses Web Mercator internally
         projection: { name: 'mercator' },
-        // Ensure we're using the standard coordinate reference system
-        transformRequest: (url, resourceType) => {
-          console.log(`🗺️ Map requesting: ${resourceType} from ${url}`);
-          return { url };
-        }
+        // No performance telemetry beacons to events.mapbox.com (the billing
+        // map-load event is unaffected).
+        performanceMetricsCollection: false,
+        // Do not re-download tiles that expire while the page stays open: the
+        // base map and the railway overlay do not change during a session, and
+        // OpenRailwayMap asks heavy users to keep their request volume down.
+        refreshExpiredTiles: false,
       });
 
       map.current.on('load', () => {
-        console.log('Map loaded successfully');
-        
+        hasLoaded = true;
+
         // Add OpenRailwayMap overlay for railway tracks
         map.current!.addSource('railway-tiles', {
           type: 'raster',
@@ -82,7 +105,9 @@ function TrainMapComponent() {
             'https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png'
           ],
           tileSize: 256,
-          attribution: '© <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a>'
+          // The tile server has nothing above z19 (404s); overzoom z19 instead.
+          maxzoom: 19,
+          attribution: OPENRAILWAYMAP_ATTRIBUTION
         });
 
         map.current!.addLayer({
@@ -99,12 +124,14 @@ function TrainMapComponent() {
       });
 
       map.current.on('error', (e) => {
-        console.error('Map error:', e);
-        setMapError('Nem sikerült betölteni a térképet');
+        console.error('Map error:', e.error ?? e);
+        const isTileError = 'tile' in e || 'sourceId' in e;
+        if (!hasLoaded && !isTileError) {
+          setMapError('Nem sikerült betölteni a térképet');
+        }
       });
 
       // Use a debounced bounds update to prevent excessive re-renders
-      let boundsTimeout: NodeJS.Timeout;
       map.current.on('moveend', () => {
         if (!map.current) return;
         clearTimeout(boundsTimeout);
@@ -117,9 +144,7 @@ function TrainMapComponent() {
               east: bounds.getEast(),
               west: bounds.getWest(),
             };
-            
-            console.log('📍 Map bounds updated:', newBounds);
-            
+
             // Validate bounds are reasonable (roughly around Hungary/Europe)
             if (newBounds.north >= 40 && newBounds.north <= 55 && 
                 newBounds.south >= 40 && newBounds.south <= 55 &&
@@ -129,12 +154,10 @@ function TrainMapComponent() {
                 newBounds.west < newBounds.east) {
               setBounds(newBounds);
             } else {
-              console.warn('🚨 Invalid bounds detected, skipping update:', newBounds);
               // Auto-correct map to Hungary if bounds go crazy
-              console.log('🔧 Auto-correcting map to Hungary bounds');
               map.current?.easeTo({
-                center: [19.0408, 47.4979], // Budapest
-                zoom: 7,
+                center: INITIAL_CENTER,
+                zoom: INITIAL_ZOOM,
                 duration: 1000
               });
             }
@@ -148,7 +171,7 @@ function TrainMapComponent() {
     }
 
     return () => {
-      console.log('Cleaning up map');
+      clearTimeout(boundsTimeout);
       if (map.current) {
         map.current.remove();
         map.current = null;
@@ -158,8 +181,6 @@ function TrainMapComponent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - only run once
 
-  // Memoize train colors to prevent flickering
-  const trainColorsCache = useRef<Map<string, { delay: number, color: string, category: DelayCategory }>>(new Map());
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- Snap-to-track, for the selected train only ---------------------------
@@ -214,36 +235,17 @@ function TrainMapComponent() {
           if (snap.snapped) {
             coordinates = snap.position;
           }
-          console.log('📍 Snap-to-track', train.number, {
-            snapped: snap.snapped,
-            reason: snap.reason,
-            offsetMeters: Math.round(snap.offsetMeters),
-            segmentIndex: snap.segmentIndex,
-            headingUsed: snap.headingUsed,
-            routeDirection: selectedRouteDirection,
-          });
         }
-        
-        // Use memoized color calculation to prevent flickering
-        let cachedColor = trainColorsCache.current.get(train.id);
-        if (!cachedColor || cachedColor.delay !== stableDelay) {
-          const delayCategory = getDelayCategory(stableDelay);
-          const color = getDelayColor(delayCategory);
-          cachedColor = { delay: stableDelay, color, category: delayCategory };
-          trainColorsCache.current.set(train.id, cachedColor);
-        }
-        
+
+        // Only what the layers and the click handler read goes to the map's
+        // worker; the colour is a pure function of the rounded delay.
         return {
           type: 'Feature' as const,
           properties: {
             id: train.id,
-            number: train.number,
             delay: stableDelay,
-            destination: train.destination?.name || 'Unknown',
-            color: cachedColor.color,
-            heading: train.heading || 0,
-            headingRaw: train.heading || 0,
-            delayCategory: cachedColor.category
+            color: getDelayColor(getDelayCategory(stableDelay)),
+            heading: train.heading || 0
           },
           geometry: {
             type: 'Point' as const,
@@ -263,26 +265,11 @@ function TrainMapComponent() {
     }
 
     updateTimeoutRef.current = setTimeout(() => {
-    // Use the memoized features
-    const features = geoJsonFeatures;
-
     const geojson = {
       type: 'FeatureCollection' as const,
-      features
+      features: geoJsonFeatures
     };
 
-    // Clean up cache for trains that no longer exist
-    if (trains) {
-      const activeTrainIds = new Set(trains.map(t => t.id));
-      for (const cachedTrainId of trainColorsCache.current.keys()) {
-        if (!activeTrainIds.has(cachedTrainId)) {
-          trainColorsCache.current.delete(cachedTrainId);
-        }
-      }
-    }
-
-    console.log(`🗺️ Updating GeoJSON layer with ${features.length} train features`);
-    
     // Check if source exists, if so just update the data
     if (map.current && map.current.getSource('trains')) {
       // Just update the data, more efficient than recreating layers
@@ -343,99 +330,51 @@ function TrainMapComponent() {
         }
       });
 
-      // Add pointer cursor on hover
-      map.current.on('mouseenter', 'trains', () => {
-        map.current!.getCanvas().style.cursor = 'pointer';
-      });
-      map.current.on('mouseleave', 'trains', () => {
-        map.current!.getCanvas().style.cursor = '';
-      });
-      map.current.on('mouseenter', 'train-arrows', () => {
-        map.current!.getCanvas().style.cursor = 'pointer';
-      });
-      map.current.on('mouseleave', 'train-arrows', () => {
-        map.current!.getCanvas().style.cursor = '';
+      // Colour-independent delay cue: "+N" (minutes) beside every train that is
+      // at least DELAY_LABEL_MIN_DELAY late. Same GeoJSON source, no DOM markers.
+      // Labels take the first free spot around the marker and are dropped where
+      // they would collide, larger delays first, so dense areas stay readable.
+      map.current.addLayer({
+        id: 'train-delay-labels',
+        type: 'symbol',
+        source: 'trains',
+        minzoom: DELAY_LABEL_MIN_ZOOM,
+        filter: ['>=', ['get', 'delay'], DELAY_LABEL_MIN_DELAY],
+        layout: {
+          'text-field': ['concat', '+', ['to-string', ['get', 'delay']]],
+          // Already loaded by the streets-v12 place labels: no extra glyph request.
+          'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], DELAY_LABEL_MIN_ZOOM, 11, 12, 13],
+          'text-variable-anchor': ['left', 'right', 'top', 'bottom'],
+          'text-radial-offset': 1.1,
+          'text-justify': 'auto',
+          'text-padding': 1,
+          'symbol-sort-key': ['-', ['get', 'delay']]
+        },
+        paint: {
+          'text-color': '#111827',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 1.5
+        }
       });
 
-      // Add click handlers for both layers
-      const handleTrainClick = (e: any) => {
-        if (e.features && e.features[0]) {
-          const feature = e.features[0];
-          const trainId = feature.properties?.id;
-          const train = trains?.find(t => t.id === trainId);
-          if (train) {
-            setSelectedTrain(train);
-          }
+      // Add pointer cursor on hover
+      const mapInstance = map.current;
+      const showPointer = () => { mapInstance.getCanvas().style.cursor = 'pointer'; };
+      const hidePointer = () => { mapInstance.getCanvas().style.cursor = ''; };
+
+      const handleTrainClick = (e: mapboxgl.MapLayerMouseEvent) => {
+        const trainId = e.features?.[0]?.properties?.id;
+        const train = trainsRef.current?.find(t => t.id === trainId);
+        if (train) {
+          setSelectedTrain(train);
         }
       };
-      
-      map.current.on('click', 'trains', handleTrainClick);
-      map.current.on('click', 'train-arrows', handleTrainClick);
-    }
 
-    // Debug coordinate and delay analysis
-    if (features.length > 0) {
-      console.log('🔍 GeoJSON analysis:');
-      const coords = features.slice(0, 5).map(f => f.geometry.coordinates);
-      console.log('  Sample coordinates:', coords);
-      
-      const allLats = features.map(f => f.geometry.coordinates[1]);
-      const allLngs = features.map(f => f.geometry.coordinates[0]);
-      const avgLat = allLats.reduce((a, b) => a + b, 0) / allLats.length;
-      const avgLng = allLngs.reduce((a, b) => a + b, 0) / allLngs.length;
-      console.log('  Average coords:', { lat: avgLat, lng: avgLng });
-      
-      // Debug delay distribution (aligned with main delay categories)
-      const delays = features.map(f => f.properties.delay);
-      const delayBuckets = {
-        onTime: delays.filter(d => d <= 4).length,        // 0-4 perc késés
-        minor: delays.filter(d => d >= 5 && d <= 19).length,      // 5-19 perc késés
-        moderate: delays.filter(d => d >= 20 && d <= 59).length,  // 20-59 perc késés
-        severe: delays.filter(d => d >= 60).length                // 60+ perc késés
-      };
-      console.log('  Delay distribution:', delayBuckets);
-      console.log('  Sample delays:', delays.slice(0, 10));
-      
-      // Debug colors and enhanced info
-      const colors = features.slice(0, 10).map(f => ({ 
-        train: f.properties.number, 
-        delay: f.properties.delay, 
-        color: f.properties.color,
-        heading: f.properties.heading, // Add heading to debug output
-        gtfsId: trains?.find(t => t.number === f.properties.number)?.gtfsId,
-        speed: trains?.find(t => t.number === f.properties.number)?.speed,
-        isMoving: trains?.find(t => t.number === f.properties.number)?.isMoving
-      }));
-      console.log('  Sample train details:', colors);
-      
-      // Debug heading values specifically
-      const headings = features.map(f => ({ 
-        train: f.properties.number,
-        heading: f.properties.heading,
-        gtfsId: trains?.find(t => t.number === f.properties.number)?.gtfsId
-      }));
-      console.log('  🧭 Train headings:', headings.slice(0, 10));
-      
-      // Debug specific problematic train
-      const problematicTrain = trains?.find(t => t.gtfsId === '1:24892393.22206360');
-      if (problematicTrain) {
-        console.log('🚨 Problematic train found:', {
-          number: problematicTrain.number,
-          heading: problematicTrain.heading,
-          gtfsId: problematicTrain.gtfsId,
-          position: problematicTrain.position
-        });
-      }
-      
-      // Show which trains have real delay data
-      const trainsWithRealDelay = features.filter(f => f.properties.delay > 0);
-      console.log(`  🚨 Trains with delays: ${trainsWithRealDelay.length}/${features.length}`);
-      if (trainsWithRealDelay.length > 0) {
-        console.log('  Delayed trains:', trainsWithRealDelay.map(f => ({
-          number: f.properties.number,
-          delay: f.properties.delay,
-          destination: f.properties.destination
-        })));
+      for (const layerId of TRAIN_LAYER_IDS) {
+        mapInstance.on('mouseenter', layerId, showPointer);
+        mapInstance.on('mouseleave', layerId, hidePointer);
+        mapInstance.on('click', layerId, handleTrainClick);
       }
     }
 
@@ -446,7 +385,7 @@ function TrainMapComponent() {
         clearTimeout(updateTimeoutRef.current);
       }
     };
-  }, [geoJsonFeatures, trains, setSelectedTrain, mapReady]);
+  }, [geoJsonFeatures, setSelectedTrain, mapReady]);
 
   // Toggle railway overlay
   useEffect(() => {
@@ -496,15 +435,11 @@ function TrainMapComponent() {
     // If no route details, we're done
     if (!routeDetails) return;
 
-    console.log('🗺️ Rendering route for train:', selectedTrain?.number, {
-      geometryLength: routeDetails.geometry.length,
-      stopsCount: routeDetails.stops.length,
-      stopsWithCoordinates: routeDetails.stops.filter(s => s.coordinates).length,
-      sampleStopCoordinates: routeDetails.stops.slice(0, 3).map(s => ({ 
-        name: s.name, 
-        coords: s.coordinates 
-      }))
-    });
+    // Route layers go under the trains. If the train layers are not there yet (the
+    // route came from cache on a fresh mount), add them on top for now - the
+    // train layers are added later and so still end up above. A missing beforeId
+    // would otherwise fail the addLayer call and fire a map error.
+    const beforeTrains = mapInstance.getLayer('train-arrows') ? 'train-arrows' : undefined;
 
     // Decode the polyline
     const decodedPath = decodePolyline(routeDetails.geometry);
@@ -538,7 +473,7 @@ function TrainMapComponent() {
         'line-width': 3,
         'line-dasharray': [2, 1] // Dashed line
       }
-    }, 'train-arrows'); // Insert before train layers to ensure trains appear on top
+    }, beforeTrains); // Insert before train layers to ensure trains appear on top
 
     // Create GeoJSON for stops
     const currentTime = new Date();
@@ -596,7 +531,7 @@ function TrainMapComponent() {
         'circle-stroke-width': 1,
         'circle-stroke-color': '#6b7280'
       }
-    }, 'train-arrows');
+    }, beforeTrains);
 
     // Layer for upcoming stops (blue, larger)
     mapInstance.addLayer({
@@ -613,7 +548,7 @@ function TrainMapComponent() {
         'circle-stroke-width': 2,
         'circle-stroke-color': '#ffffff'
       }
-    }, 'train-arrows');
+    }, beforeTrains);
 
     // Layer for next stop (pulsing animation)
     mapInstance.addLayer({
@@ -628,7 +563,7 @@ function TrainMapComponent() {
         'circle-stroke-color': '#ffffff',
         'circle-opacity': 0.8
       }
-    }, 'train-arrows');
+    }, beforeTrains);
 
     // Enhanced ETA Label System - Progressive UX Approach
     
@@ -825,7 +760,7 @@ function TrainMapComponent() {
       
       cleanupRouteLayers();
     };
-  }, [routeDetails, mapReady, selectedTrain]);
+  }, [routeDetails, mapReady]);
 
   // Handle user location and marker
   useEffect(() => {
@@ -904,13 +839,9 @@ function TrainMapComponent() {
   useEffect(() => {
     if (!map.current || !mapReady || !focusedTrain) return;
 
-    if (!focusedTrain.position) {
-      console.warn('🎯 Cannot focus on train', focusedTrain.number, '- no GPS position available');
-      return;
-    }
+    // A train without a GPS fix cannot be focused.
+    if (!focusedTrain.position) return;
 
-    console.log('🎯 Focusing on train:', focusedTrain.number, 'at position:', [focusedTrain.position.longitude, focusedTrain.position.latitude]);
-    
     // Zoom to the train's position with high zoom level
     map.current.easeTo({
       center: [focusedTrain.position.longitude, focusedTrain.position.latitude],
@@ -923,38 +854,6 @@ function TrainMapComponent() {
       setFocusedTrain(null);
     }, 1500);
   }, [focusedTrain, mapReady, setFocusedTrain]);
-
-  // Memoized helper function to create train marker element
-  const createTrainMarker = useCallback((train: Train, color: string): HTMLElement => {
-    const el = document.createElement('div');
-    el.className = 'train-marker';
-    el.style.width = '24px';
-    el.style.height = '24px';
-    el.style.borderRadius = '50%';
-    el.style.backgroundColor = color;
-    el.style.border = '2px solid white';
-    el.style.cursor = 'pointer';
-    el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
-    
-    // Add direction indicator
-    const arrow = document.createElement('div');
-    arrow.style.width = '0';
-    arrow.style.height = '0';
-    arrow.style.borderLeft = '4px solid transparent';
-    arrow.style.borderRight = '4px solid transparent';
-    arrow.style.borderBottom = `8px solid ${color}`;
-    arrow.style.position = 'absolute';
-    arrow.style.top = '-10px';
-    arrow.style.left = '50%';
-    arrow.style.transform = `translateX(-50%) rotate(${train.heading}deg)`;
-    arrow.style.transformOrigin = 'bottom center';
-    
-    el.appendChild(arrow);
-    el.style.position = 'relative';
-    
-    return el;
-  }, []); // No dependencies needed since it only uses pure DOM operations
-
 
   if (mapError) {
     return (
@@ -983,7 +882,7 @@ function TrainMapComponent() {
         <DelayLegend />
       </div>
 
-      {/* --- UPDATED: UI Controls Wrapper - Now Vertical --- */}
+      {/* UI controls */}
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
         {/* Top row: Railway and Refresh buttons */}
         <div className="flex items-center gap-2">
@@ -1000,14 +899,14 @@ function TrainMapComponent() {
             🚂 Vasúti pályák
           </button>
 
-          {/* --- ADDED: Manual Refresh Button --- */}
+          {/* Manual refresh */}
           <button
             onClick={() => refetch()}
             disabled={isFetching}
             className="flex items-center gap-2 px-3 py-2 bg-white text-gray-700 rounded-lg shadow-md hover:bg-gray-50 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
             title="Vonatadatok frissítése"
           >
-            <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
+            <RefreshCw className={cn('h-4 w-4', isFetching && 'motion-safe:animate-spin')} />
             <span className="text-sm font-medium">
               {isFetching ? 'Frissítés...' : 'Frissítés'}
             </span>
@@ -1020,8 +919,7 @@ function TrainMapComponent() {
         </div>
       </div>
       
-      {/* --- UPDATED: Use `isLoading` for the initial load message --- */}
-      {/* This only shows on the very first load, not on background refreshes */}
+      {/* Only on the very first load, not on background refreshes */}
       {isLoading && !trains && (
         <div className="absolute top-16 left-4 bg-white rounded-lg shadow-md p-3">
           <div className="flex items-center gap-2">
@@ -1041,5 +939,5 @@ function TrainMapComponent() {
   );
 }
 
-// Memoize the component since it has no props and expensive operations
+// Memoized: its only prop is the build-time token, so parent re-renders skip it.
 export const TrainMap = memo(TrainMapComponent);
