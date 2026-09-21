@@ -1,59 +1,60 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { LoadingSpinner } from '../UI/LoadingSpinner';
 
-// Dynamically import both map components
+// Inlined by Next.js at build time. There is deliberately no fallback token in the
+// source: production gets its (URL-restricted) token from the build environment.
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+
+function MapPlaceholder() {
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-gray-100">
+      <LoadingSpinner size="lg" />
+    </div>
+  );
+}
+
 const TrainMap = dynamic(() => import('./TrainMap').then(mod => mod.TrainMap), {
   ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-gray-100">
-      <LoadingSpinner size="lg" />
-    </div>
-  )
+  loading: MapPlaceholder,
 });
 
-const SimpleMap = dynamic(() => import('./SimpleMap').then(mod => mod.SimpleMap), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-gray-100">
-      <LoadingSpinner size="lg" />
+function MissingTokenMessage() {
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-gray-100 p-6">
+      <div role="alert" className="max-w-md bg-white rounded-lg shadow-md p-6 text-center">
+        <p className="text-lg font-semibold text-gray-900 mb-2">
+          A térkép most nem érhető el
+        </p>
+        <p className="text-sm text-gray-600 mb-4">
+          Hiányzik a térképszolgáltatás beállítása, ezért nem tudjuk megjeleníteni a vonatokat.
+          Kérjük, nézz vissza egy kicsit később.
+        </p>
+        <p className="text-xs text-gray-400">
+          Üzemeltetőknek: a <code>NEXT_PUBLIC_MAPBOX_TOKEN</code> környezeti változót a build
+          idején kell megadni.
+        </p>
+      </div>
     </div>
-  )
-});
+  );
+}
 
 export function MapSelector() {
-  const [hasMapboxToken, setHasMapboxToken] = useState<boolean | null>(null);
-
+  // Mount the map - and so start downloading the ~400 KiB mapbox-gl chunk - after
+  // the first paint, as the previous token check in an effect did, so the page's
+  // own fonts and text are not competing with it for bandwidth.
+  const [afterFirstPaint, setAfterFirstPaint] = useState(false);
   useEffect(() => {
-    // Hardcode tokens based on environment
-    const isDev = process.env.NODE_ENV === 'development';
-    const token = isDev 
-      ? 'pk.eyJ1IjoiYXJvbmx1a2FjcyIsImEiOiJjbWNmY3dzYTEwODJsMm1xeDRjcWlqNDM1In0.dp1ZMJivifhXprb0bzprTQ' // dev token
-      : 'pk.eyJ1IjoiYXJvbmx1a2FjcyIsImEiOiJjbWM4eTZyOXAweW5uMmtzM3hmanhtNzlxIn0.iZgLUL05MUWcOI_03e1EFA'; // production/staging token
-    
-    const hasToken = Boolean(token);
-    
-    console.log('MapSelector - hardcoded token check:', hasToken, 'env:', process.env.NODE_ENV, 'token:', token?.substring(0, 10) + '...');
-    setHasMapboxToken(hasToken);
+    setAfterFirstPaint(true);
   }, []);
 
-  // Show loading while determining which map to use
-  if (hasMapboxToken === null) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-100">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
+  if (!MAPBOX_TOKEN) {
+    return <MissingTokenMessage />;
   }
-
-  // Render appropriate map component
-  if (hasMapboxToken) {
-    console.log('MapSelector: Loading TrainMap (interactive)');
-    return <TrainMap />;
-  } else {
-    console.log('MapSelector: Loading SimpleMap (fallback)');
-    return <SimpleMap />;
+  if (!afterFirstPaint) {
+    return <MapPlaceholder />;
   }
+  return <TrainMap accessToken={MAPBOX_TOKEN} />;
 }
