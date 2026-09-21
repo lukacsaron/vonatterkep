@@ -2,8 +2,9 @@
 
 import { Train } from '@/types';
 import { TrainInfoCard } from './TrainInfoCard';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useFocusTrap, useRestoreFocus } from '@/app/components/UI/focus';
 
 interface TrainInfoModalProps {
   train: Train | null;
@@ -13,6 +14,20 @@ interface TrainInfoModalProps {
 export function TrainInfoModal({ train, onClose }: TrainInfoModalProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  // The card is rendered twice (mobile sheet / desktop side panel) and CSS
+  // shows one of them. Focus handling targets whichever is on screen.
+  const mobileRef = useRef<HTMLDivElement>(null);
+  const desktopRef = useRef<HTMLDivElement>(null);
+  const isOpen = !!train;
+
+  // Give focus back to where it was (e.g. the search button) on close.
+  // Declared before the effect below that moves focus into the panel.
+  const visiblePanelRef = useRef<HTMLDivElement | null>(null);
+  useRestoreFocus(isOpen, visiblePanelRef);
+
+  // The mobile sheet covers the whole screen, so Tab stays inside it there.
+  // The desktop panel sits beside the live map and does not trap focus.
+  useFocusTrap(mobileRef, isOpen);
 
   useEffect(() => {
     setIsMounted(true);
@@ -34,10 +49,36 @@ export function TrainInfoModal({ train, onClose }: TrainInfoModalProps) {
     };
   }, [train]);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setIsVisible(false);
     setTimeout(onClose, 300); // Allow animation to complete
-  };
+  }, [onClose]);
+
+  // Move focus into the panel when it opens, so keyboard and screen reader
+  // users land on the train details.
+  useEffect(() => {
+    if (!isOpen || !isMounted) return;
+    const isDesktop = window.matchMedia('(min-width: 768px)').matches;
+    const container = isDesktop ? desktopRef.current : mobileRef.current;
+    visiblePanelRef.current = container;
+    container?.querySelector<HTMLElement>('[role="dialog"]')?.focus({ preventScroll: true });
+  }, [isOpen, isMounted]);
+
+  // Escape closes the panel - unless another modal dialog (the search) is on
+  // top, which handles Escape itself.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const otherModalOpen = Array.from(
+        document.querySelectorAll('[role="dialog"][aria-modal="true"]')
+      ).some((el) => !mobileRef.current?.contains(el) && !desktopRef.current?.contains(el));
+      if (otherModalOpen) return;
+      handleClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, handleClose]);
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     // Don't close modal on backdrop click for desktop - only via X button
@@ -105,8 +146,9 @@ export function TrainInfoModal({ train, onClose }: TrainInfoModalProps) {
               padding: 0
             }}
             onTouchStart={handleTouchStart}
+            ref={mobileRef}
           >
-            <TrainInfoCard train={train} onClose={handleClose} disableClickOutside={true} />
+            <TrainInfoCard train={train} onClose={handleClose} disableClickOutside={true} modal />
           </div>
         </div>
       </div>
@@ -122,7 +164,7 @@ export function TrainInfoModal({ train, onClose }: TrainInfoModalProps) {
           padding: '1rem'
         }}
       >
-        <div className="h-full flex items-center justify-end">
+        <div className="h-full flex items-center justify-end" ref={desktopRef}>
           <TrainInfoCard train={train} onClose={handleClose} disableClickOutside={true} />
         </div>
       </div>

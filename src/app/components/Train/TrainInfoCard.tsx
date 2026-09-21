@@ -5,7 +5,7 @@ import { DelayIndicator } from '../UI/DelayIndicator';
 import { MapPin, Navigation, Clock, Gauge, X, Zap, Settings, Thermometer, ChevronDown, ChevronRight } from 'lucide-react';
 import { formatTime } from '@/lib/utils';
 import { api, endpoints, ApiError } from '@/lib/api/client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { 
   getTrainTypeEmoji, 
   getComfortDescription, 
@@ -21,6 +21,11 @@ interface TrainInfoCardProps {
   train: Train;
   onClose?: () => void;
   disableClickOutside?: boolean;
+  /**
+   * The panel blocks the rest of the page (mobile full-screen sheet). Sets
+   * aria-modal; the caller is responsible for trapping focus.
+   */
+  modal?: boolean;
 }
 
 interface LocomotiveInfoSectionProps {
@@ -29,34 +34,43 @@ interface LocomotiveInfoSectionProps {
 
 function LocomotiveInfoSection({ locomotiveType }: LocomotiveInfoSectionProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const panelId = useId();
+  const typeDescription = TRAIN_TYPE_DESCRIPTIONS[locomotiveType.uicCode] || locomotiveType.fullName;
   
   return (
     <div className="bg-gray-50 border-b flex-shrink-0">
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsExpanded(!isExpanded);
-        }}
-        className="w-full px-4 md:px-4 py-4 md:py-3 flex items-center justify-between text-left hover:bg-gray-100 transition-colors min-h-[56px] md:min-h-auto"
-      >
-        <h3 className="text-base md:text-sm font-semibold text-gray-700">Mozgóállomány információ</h3>
-        {isExpanded ? (
-          <ChevronDown className="w-5 h-5 md:w-4 md:h-4 text-gray-500" />
-        ) : (
-          <ChevronRight className="w-5 h-5 md:w-4 md:h-4 text-gray-500" />
-        )}
-      </button>
+      <h3>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsExpanded(!isExpanded);
+          }}
+          aria-expanded={isExpanded}
+          aria-controls={panelId}
+          className="w-full px-4 md:px-4 py-4 md:py-3 flex items-center justify-between text-left hover:bg-gray-100 transition-colors min-h-[56px] md:min-h-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+        >
+          <span className="text-base md:text-sm font-semibold text-gray-700">Mozgóállomány információ</span>
+          {isExpanded ? (
+            <ChevronDown className="w-5 h-5 md:w-4 md:h-4 text-gray-500" />
+          ) : (
+            <ChevronRight className="w-5 h-5 md:w-4 md:h-4 text-gray-500" />
+          )}
+        </button>
+      </h3>
       
       {isExpanded && (
-        <div className="px-4 md:px-4 pb-4 md:pb-4 space-y-3 md:space-y-2">
+        <div id={panelId} className="px-4 md:px-4 pb-4 md:pb-4 space-y-3 md:space-y-2">
           {/* Train type and name */}
           <div className="flex items-center gap-3 md:gap-2">
             <span 
               className="text-3xl md:text-2xl mnr-font cursor-help" 
-              title={TRAIN_TYPE_DESCRIPTIONS[locomotiveType.uicCode] || locomotiveType.fullName}
+              title={typeDescription}
+              aria-hidden="true"
             >
               {getTrainTypeEmoji(locomotiveType)}
             </span>
+            {typeDescription && <span className="sr-only">{typeDescription}</span>}
             <div>
               <div className="font-semibold text-gray-900 text-lg md:text-base">
                 {locomotiveType.name}
@@ -93,7 +107,8 @@ function LocomotiveInfoSection({ locomotiveType }: LocomotiveInfoSectionProps) {
             
             <div className="flex items-center gap-2 md:gap-1 px-3 py-2 md:px-2 md:py-1 rounded-full text-sm md:text-sm font-medium bg-yellow-100 text-yellow-800 border border-yellow-200 min-h-[40px] md:min-h-auto">
               <span>Megbízhatóság:</span>
-              <span>{getReliabilityStars(locomotiveType.reliabilityRating)}</span>
+              <span aria-hidden="true">{getReliabilityStars(locomotiveType.reliabilityRating)}</span>
+              <span className="sr-only">{locomotiveType.reliabilityRating} / 5</span>
             </div>
           </div>
           
@@ -107,10 +122,11 @@ function LocomotiveInfoSection({ locomotiveType }: LocomotiveInfoSectionProps) {
   );
 }
 
-export function TrainInfoCard({ train, onClose, disableClickOutside = false }: TrainInfoCardProps) {
+export function TrainInfoCard({ train, onClose, disableClickOutside = false, modal = false }: TrainInfoCardProps) {
   const [trainDetails, setTrainDetails] = useState<Train | null>(null);
   const [loading, setLoading] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   // Fetch enhanced train information via server API
   useEffect(() => {
@@ -219,14 +235,18 @@ export function TrainInfoCard({ train, onClose, disableClickOutside = false }: T
   return (
     <div 
       ref={cardRef} 
-      className="bg-white w-full h-full md:rounded-3xl md:shadow-xl md:max-w-[400px] md:max-h-[80vh] relative md:border md:border-gray-300 overflow-hidden flex flex-col"
+      role="dialog"
+      aria-modal={modal || undefined}
+      aria-labelledby={titleId}
+      tabIndex={-1}
+      className="bg-white w-full h-full md:rounded-3xl md:shadow-xl md:max-w-[400px] md:max-h-[80vh] relative md:border md:border-gray-300 overflow-hidden flex flex-col focus:outline-none"
       style={{ 
         margin: 0,
         maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vw' : undefined
       }}
     >
       {/* Mobile handle bar */}
-      <div className="md:hidden flex justify-center py-2 bg-gray-100 w-full" style={{ margin: 0 }}>
+      <div className="md:hidden flex justify-center py-2 bg-gray-100 w-full" style={{ margin: 0 }} aria-hidden="true">
         <div className="w-12 h-1 bg-gray-300 rounded-full"></div>
       </div>
       
@@ -236,7 +256,8 @@ export function TrainInfoCard({ train, onClose, disableClickOutside = false }: T
           <div className="flex items-center gap-3">
             <div className="w-1 h-12 md:w-2 md:h-8 bg-blue-500 rounded"></div>
             <div>
-              <h2 className="text-2xl md:text-xl font-bold text-gray-900">
+              <h2 id={titleId} className="text-2xl md:text-xl font-bold text-gray-900">
+                <span className="sr-only">Vonat </span>
                 {train.number}
               </h2>
               {getRouteCode() && (
@@ -249,8 +270,9 @@ export function TrainInfoCard({ train, onClose, disableClickOutside = false }: T
           {onClose && (
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 p-3 md:p-2 hover:bg-gray-100 rounded-full transition-colors duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center"
-              aria-label="Bezárás"
+              type="button"
+              className="text-gray-500 hover:text-gray-700 p-3 md:p-2 hover:bg-gray-100 rounded-full transition-colors duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              aria-label="Vonatadatok bezárása"
             >
               <X className="w-6 h-6 md:w-5 md:h-5" />
             </button>
@@ -293,7 +315,7 @@ export function TrainInfoCard({ train, onClose, disableClickOutside = false }: T
               <div className={`font-semibold text-lg md:text-base ${
                 (trainDetails?.delay ?? train.delay) > 0 
                   ? 'text-red-600' 
-                  : 'text-green-600'
+                  : 'text-green-700'
               }`}>
                 {getDelayText(trainDetails?.delay ?? train.delay)}
               </div>
@@ -335,7 +357,7 @@ export function TrainInfoCard({ train, onClose, disableClickOutside = false }: T
                   className="flex items-center gap-2 md:gap-1 px-3 py-2 md:px-2 md:py-1 bg-white border border-gray-200 rounded-full text-sm md:text-sm hover:bg-blue-50 hover:border-blue-200 transition-colors cursor-help min-h-[44px] md:min-h-auto"
                   title={serviceDesc}
                 >
-                  <span className="mnr-font text-blue-600 font-medium text-lg md:text-base">
+                  <span className="mnr-font text-blue-600 font-medium text-lg md:text-base" aria-hidden="true">
                     {serviceChar}
                   </span>
                   <span className="text-gray-700 text-sm md:text-xs font-medium">
@@ -348,8 +370,13 @@ export function TrainInfoCard({ train, onClose, disableClickOutside = false }: T
         </div>
       )}
       
-      {/* Scrollable content */}
-      <div className="overflow-y-auto flex-1 px-4 md:px-4 py-4 md:py-3">
+      {/* Scrollable content - focusable so keyboard users can scroll it */}
+      <div
+        className="overflow-y-auto flex-1 px-4 md:px-4 py-4 md:py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+        tabIndex={0}
+        role="region"
+        aria-label="Menetrend és részletek"
+      >
 
         {/* Loading state */}
         {loading && (
@@ -362,7 +389,7 @@ export function TrainInfoCard({ train, onClose, disableClickOutside = false }: T
         {/* Route timetable table */}
         {trainDetails?.route && trainDetails.route.length > 0 && (
           <div className="space-y-4 md:space-y-3">
-            <h4 className="font-semibold text-lg md:text-sm">Menetrend</h4>
+            <h3 className="font-semibold text-lg md:text-sm">Menetrend</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-base md:text-sm border-collapse">
                 <thead>
@@ -384,6 +411,7 @@ export function TrainInfoCard({ train, onClose, disableClickOutside = false }: T
                       >
                         <td className="py-4 md:py-2 px-2 md:px-1 font-medium">
                           {stop.station.name}
+                          {isPassed && <span className="sr-only"> (elhaladt)</span>}
                         </td>
                         <td className="text-center py-4 md:py-2 px-2 md:px-1">
                           {stop.arrival ? (
@@ -392,7 +420,8 @@ export function TrainInfoCard({ train, onClose, disableClickOutside = false }: T
                                 {formatTime(new Date(stop.arrival))}
                               </span>
                               {stop.actualArrival && formatTime(new Date(stop.actualArrival)) !== formatTime(new Date(stop.arrival)) && (
-                                <span className={`${stop.delay && stop.delay > 0 ? 'text-red-600' : 'text-green-600'} text-sm md:text-xs`}>
+                                <span className={`${stop.delay && stop.delay > 0 ? 'text-red-600' : 'text-green-700'} text-sm md:text-xs`}>
+                                  <span className="sr-only">{stop.delay && stop.delay > 0 ? 'késve: ' : 'tényleges: '}</span>
                                   {formatTime(new Date(stop.actualArrival))}
                                 </span>
                               )}
@@ -408,7 +437,8 @@ export function TrainInfoCard({ train, onClose, disableClickOutside = false }: T
                                 {formatTime(new Date(stop.departure))}
                               </span>
                               {stop.actualDeparture && formatTime(new Date(stop.actualDeparture)) !== formatTime(new Date(stop.departure)) && (
-                                <span className={`${stop.delay && stop.delay > 0 ? 'text-red-600' : 'text-green-600'} text-sm md:text-xs`}>
+                                <span className={`${stop.delay && stop.delay > 0 ? 'text-red-600' : 'text-green-700'} text-sm md:text-xs`}>
+                                  <span className="sr-only">{stop.delay && stop.delay > 0 ? 'késve: ' : 'tényleges: '}</span>
                                   {formatTime(new Date(stop.actualDeparture))}
                                 </span>
                               )}

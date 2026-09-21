@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Github, Globe, Linkedin, Mail, Train, Heart } from 'lucide-react';
 import { Navbar } from '@/app/components/UI/Navbar';
+import { CookieSettingsButton } from '@/app/components/Consent/ConsentSettings';
 
 export default function KiVagyokPage() {
   return (
@@ -138,6 +139,9 @@ export default function KiVagyokPage() {
             <p className="text-gray-500 italic">
               PS: Igen, ez egy hobbi projekt. Igen, vannak még hibák. Igen, dolgozom rajtuk. 
               Nem, nem vagyok fizetett ügynök. 😄
+            </p>
+            <p className="mt-3 text-sm">
+              <CookieSettingsButton />
             </p>
           </div>
         </div>

@@ -12,13 +12,16 @@ interface StationSearchProps {
   placeholder?: string;
   value?: Station | null;
   className?: string;
+  /** id for the text input, so a page <label htmlFor> can name it. */
+  inputId?: string;
 }
 
 export function StationSearch({ 
   onSelect, 
   placeholder = 'Állomás keresése...', 
   value,
-  className 
+  className,
+  inputId
 }: StationSearchProps) {
   const [search, setSearch] = useState(value?.name || '');
   const [isOpen, setIsOpen] = useState(false);
@@ -78,7 +81,10 @@ export function StationSearch({
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         <input
           ref={inputRef}
+          id={inputId}
           type="text"
+          // Named by the page's <label> when inputId is given; otherwise by this.
+          aria-label={inputId ? undefined : 'Állomás keresése'}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onFocus={() => setIsOpen(true)}
@@ -87,8 +93,10 @@ export function StationSearch({
         />
         {search && (
           <button
+            type="button"
             onClick={handleClear}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            aria-label="Állomás törlése"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
             <X className="h-4 w-4" />
           </button>
@@ -109,6 +117,7 @@ export function StationSearch({
               {stations.map((station) => (
                 <li key={station.id}>
                   <button
+                    type="button"
                     onClick={() => handleSelect(station)}
                     className="w-full px-4 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
                   >

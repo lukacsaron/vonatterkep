@@ -17,6 +17,12 @@
   font-family: 'MNR2007', 'Courier New', monospace;
 }
 
+/* Consent banner: hidden before first paint when a choice is already stored
+   (see the inline script in layout.tsx). */
+html[data-consent] [data-consent-pending] {
+  display: none;
+}
+
 /* Custom styles for the app */
 body {
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
