@@ -3,9 +3,16 @@ if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config({ path: '.env.local' });
 }
 
-import { mavApi } from '../src/lib/api/mav';
+import { mavApi, VonatinfoHttpError } from '../src/lib/api/mav';
 import { transformMavTrain } from '../src/lib/api/transformers';
 import { Train } from '../src/types';
+import {
+  DEFAULT_IDENTITY_BUDGET,
+  DEFAULT_IDENTITY_TTL_SECONDS,
+  enrichTrainIdentities,
+  formatEnrichmentSummary,
+  redisIdentityStore,
+} from '../src/lib/trains/identityEnrichment';
 import { findStationByName, isGtfsRefreshDue, loadGtfsIndex, refreshGtfsStations } from '../src/lib/gtfs/stations';
 import {
   SNAPSHOT_TTL_SECONDS,
@@ -25,6 +32,19 @@ const HASH_KEY = 'trains:live';
 const CACHE_TTL_SECONDS = 60;
 const REDIS_CHANNEL = 'trains:updates';
 const VEHICLE_MAX_AGE_MINUTES = Math.round(WORKER_VEHICLE_MAX_AGE_MS / 60000);
+
+function nonNegativeIntFromEnv(name: string, fallback: number): number {
+  const parsed = parseInt(process.env[name] || '', 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+// Train identity (category, name, line) costs one vonatinfo TRAIN request per
+// train. MÁV has IP-blocked this server once for request volume, so this is a
+// hard per-cycle cap; 0 turns enrichment requests off (cached identity is
+// still applied).
+const IDENTITY_BUDGET = nonNegativeIntFromEnv('WORKER_IDENTITY_BUDGET', DEFAULT_IDENTITY_BUDGET);
+const IDENTITY_TTL_SECONDS = nonNegativeIntFromEnv('WORKER_IDENTITY_TTL_SECONDS', DEFAULT_IDENTITY_TTL_SECONDS) || DEFAULT_IDENTITY_TTL_SECONDS;
+const identityStore = redisIdentityStore(redisClient);
 
 
 
@@ -130,20 +150,26 @@ async function runFetchCycle(): Promise<boolean> {
     const withCoords = trains.filter(t => t.origin?.coordinates && t.destination?.coordinates).length;
     console.log(`\u{1F5FA}\uFE0F Endpoints: ${withCoords}/${trains.length} trains have both ends located via GTFS`);
 
-    const trainsWithLocomotive = trains.filter(t => t.locomotiveType);
-    const trainsWithRoute = trains.filter(t => t.origin && t.destination);
-    
-    console.log(`🚂 Worker: ${trainsWithLocomotive.length}/${trains.length} trains have locomotive detection`);
-    console.log(`🗺️ Worker: ${trainsWithRoute.length}/${trains.length} trains have origin/destination data`);
-    
-    if (trainsWithLocomotive.length > 0) {
-      console.log('🔍 Sample locomotives detected:', trainsWithLocomotive.slice(0, 3).map(t => ({
-        number: t.number,
-        type: t.locomotiveType?.name,
-        uic: t.uicInfo?.rawUIC
-      })));
+    // Category, name and line: cached per ElviraID and applied to every train,
+    // plus at most IDENTITY_BUDGET new TRAIN lookups this cycle. Best effort -
+    // a failure here never costs the positions.
+    if (trains.length > 0) {
+      try {
+        const stats = await enrichTrainIdentities(trains, identityStore, {
+          budget: IDENTITY_BUDGET,
+          ttlSeconds: IDENTITY_TTL_SECONDS,
+          fetchIdentity: elviraId => mavApi.getTrainIdentity(elviraId),
+          isRateLimitError: error => error instanceof VonatinfoHttpError && error.isRateLimit,
+        });
+        console.log(formatEnrichmentSummary(stats));
+      } catch (error) {
+        console.warn('Train identity enrichment skipped this cycle:', error instanceof Error ? error.message : error);
+      }
     }
-    
+
+    const trainsWithRoute = trains.filter(t => t.origin && t.destination);
+    console.log(`🗺️ Worker: ${trainsWithRoute.length}/${trains.length} trains have origin/destination data`);
+
     if (trainsWithRoute.length > 0) {
       console.log('🚂 Sample routes detected:', trainsWithRoute.slice(0, 3).map(t => ({
         number: t.number,
@@ -323,7 +349,8 @@ async function scheduleNextCycle() {
 
 console.log(
   `Background worker started. Base interval ${FETCH_INTERVAL_MS / 1000}s, ` +
-  `vehicle max age ${VEHICLE_MAX_AGE_MINUTES} min (snapshot -> ${TRAIN_SNAPSHOT_KEY}).`
+  `vehicle max age ${VEHICLE_MAX_AGE_MINUTES} min (snapshot -> ${TRAIN_SNAPSHOT_KEY}), ` +
+  `identity lookups ${IDENTITY_BUDGET}/cycle cached ${Math.round(IDENTITY_TTL_SECONDS / 3600)} h.`
 );
 
 // Wait a bit for Redis connection to establish, then start

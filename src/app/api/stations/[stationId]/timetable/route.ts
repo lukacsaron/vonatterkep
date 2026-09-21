@@ -119,7 +119,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // vonatinfo.mav.hu serves the board by station NAME. The old MobileService
-    // host (getDepartures/getArrivals) is dead and the OTP host is IP-blocked.
+    // host is dead and the OTP host (mavplusz.hu) IP-blocks this server.
     const boardKey = `${stationData.id}-${boardDay}`;
     let board = boardCache.get(boardKey);
     if (!board || now - board.timestamp >= CACHE_DURATION) {
